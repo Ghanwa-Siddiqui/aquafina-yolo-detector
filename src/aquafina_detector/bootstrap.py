@@ -10,6 +10,8 @@ import subprocess
 import sys
 import urllib.request
 
+from packaging.version import InvalidVersion, Version
+
 from . import UPSTREAM_COMMIT, UPSTREAM_URL, WEIGHTS_URL
 from .common import require_drive, sha256, write_json
 
@@ -46,9 +48,17 @@ def audit_runtime():
         if line.strip() and not line.lstrip().startswith("#"):
             name, version = line.strip().split("==")
             expected[name.lower().replace("_", "-")] = version
-    mismatches = {name: {"expected": version, "installed": packages.get(name)}
-                  for name, version in expected.items()
-                  if packages.get(name, "").split("+")[0] != version}
+    mismatches = {}
+    for name, version in expected.items():
+        installed = packages.get(name)
+        try:
+            # Preserve CUDA/local build suffix handling while normalizing PEP 440
+            # spellings such as thop's implicit versus explicit post-release.
+            matches = installed is not None and Version(Version(installed).public) == Version(version)
+        except InvalidVersion:
+            matches = False
+        if not matches:
+            mismatches[name] = {"expected": version, "installed": installed}
     if mismatches:
         raise RuntimeError(f"Pinned dependency mismatch; rerun setup and restart session: {mismatches}")
     import yolox

@@ -5,7 +5,7 @@ available. PyTorch/CUDA are not installed in the local project environment.
 
 Completed locally:
 
-- 82 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
+- 90 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
 - Archive fixtures verify a single sequential source read, MD5 mismatch rejection,
   safe local extraction, unchanged original inputs, complete-stage reuse and
   rejection of modified stages. Cache tests verify reuse without a full audit,
@@ -23,7 +23,7 @@ Completed locally:
   schemas/policy keys are rejected; tampered completion counts are rejected. Incomplete
   conversions are rejected, and a train/val-only conversion passes the verifier.
 - Notebook 01's setup/stage/audit-cache/preview order and conversion gate are tested.
-  All 28 source/notebook files pass syntax and clean-output validation.
+  All 29 source/notebook files pass syntax and clean-output validation.
   This policy was tested locally only; no real Drive conversion or training ran.
 - The actual COCO evaluator returns AP=1 for perfect boxes and AP=0 for disjoint
   boxes. Annotation ID 0 is rejected because COCO uses it as an unmatched sentinel.
@@ -65,3 +65,12 @@ delta calculations, order-independent matching, ambiguous ties, report destinati
 guards, stale-source rejection and unchanged raw hashes/audit state are tested.
 The full rerun passed after a Windows fixture-directory rename access error in the
 first run. No real Drive diagnostic run, conversion or training was performed.
+
+Bootstrap version auditing now compares normalized packaging.version.Version values.
+Both thop 0.1.1-2209072238 and 0.1.1.post2209072238 pass the unchanged pin.
+Regression tests reject different post releases, different releases, missing and
+invalid versions. Existing CUDA/local build suffix handling is preserved; a
+changed torch release still fails. All dependency pins remain unchanged.
+These tests mock distribution metadata and source auditing, without installing
+packages or running training. The full suite passed on rerun after an unrelated
+Windows fixture-directory rename access error; the real Colab runtime was not run.
