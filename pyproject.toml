@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aquafina-detector"
+version = "0.1.0"
+description = "Single-class Aquafina detection with official Megvii YOLOX"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8,<9", "Pillow>=10"]
+
+[project.scripts]
+aquafina-data = "aquafina_detector.data:main"
+aquafina-train = "aquafina_detector.train:main"
+aquafina-evaluate = "aquafina_detector.evaluate:main"
+aquafina-predict = "aquafina_detector.predict:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["gpu: requires configured YOLOX and a CUDA GPU"]

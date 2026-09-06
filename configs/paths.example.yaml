@@ -1,0 +1,6 @@
+# Documentation example; CLI/notebooks take explicit paths, not this YAML.
+drive_root: /content/drive/MyDrive/aquafina-yolo
+temple_root: /content/drive/MyDrive/aquafina-yolo/raw/temple/extracted/detection_dataset
+prepared: /content/drive/MyDrive/aquafina-yolo/processed/temple
+pretrained: /content/drive/MyDrive/aquafina-yolo/weights/pretrained/yolox_s.pth
+runs: /content/drive/MyDrive/aquafina-yolo/runs
