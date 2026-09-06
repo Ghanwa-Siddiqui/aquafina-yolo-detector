@@ -8,25 +8,37 @@ There are no datasets or weights in this repository and no measured accuracy yet
 ## Start here
 
 1. Read [the TempleRAIL policy](docs/temple_dataset.md).
-2. Keep the extracted raw dataset at
-   `/content/drive/MyDrive/aquafina-yolo/raw/temple/extracted/detection_dataset`.
+2. Use the existing archive at
+   `/content/drive/MyDrive/aquafina-yolo/raw/temple/detection_dataset.tar.gz`.
+   Expected MD5: `fca7260d4785af1dec18aa320fa9fc4a`.
 3. Open [notebook 01](notebooks/01_prepare_data.ipynb) on Colab CPU. Run cells
-   **3 → 5 → 7** for setup, read-only audit and preview (counting markdown cells).
-4. Review the results, then set `CONFIRM_CONVERSION = True` in **cell 9** only when
-   ready to write processed data. Cell **11** reads back the completion marker.
+   **3 → 5 → 7 → 9** for mount/setup, archive verification/local extraction,
+   cached-or-fresh audit, and preview (counting markdown cells).
+4. Review the results, then set `CONFIRM_CONVERSION = True` in **cell 11** only when
+   ready to write processed data. Cell **13** reads back the completion marker.
 5. Stop there for this dataset-support stage. [Notebook 02](notebooks/02_train_colab.ipynb)
    is for future training; [notebook 03](notebooks/03_evaluate_predict.ipynb) is for
    future evaluation and inference. See [the Colab workflow](docs/colab_workflow.md).
 
-Notebook 01 reads `JPEGImages`, `Annotations` (XML), `Labels` (Darknet TXT), and
-`ImageSets/Main`. It no longer requires an input `annotations.json`. Nothing under
-the raw directory is modified, including the XML object named `dog`.
+Notebook 01 copies and hashes one archive from Drive, then extracts locally to
+`/content/temple_stage/detection_dataset`. Per-file audit reads now use this fast
+temporary disk, not the extracted Drive directory. Progress prints every **250
+images**. It reads `JPEGImages`, `Annotations` (XML), `Labels` (Darknet TXT), and
+`ImageSets/Main`; no input `annotations.json` is needed. The original Drive archive
+and extracted dataset are never modified or deleted, including the XML dog object.
+
+Completed audit state is cached automatically in Drive at
+`/content/drive/MyDrive/aquafina-yolo/cache/temple_audit/<archive-md5>.json`.
+`REUSE_AUDIT_CACHE=True` skips repeated image/XML/label auditing only when archive
+MD5/SHA256, audit-code/policy signature and local file hashes match a successful
+completed report. Set it False to force a fresh audit. Staging and audit-cache
+writes happen before conversion confirmation; preview images remain in memory.
 
 Conversion writes to `/content/drive/MyDrive/aquafina-yolo/processed/temple`:
 `audit.json`, `anomaly_report.json`, `class_counts.json`, `train_manifest.json`,
 `val_manifest.json`, canonical COCO annotations, copied images, a combined split
 manifest, and a final `conversion.json` marker with raw-file hashes. Existing output
-is never overwritten. Audit/preview results stay in memory until confirmation.
+is never overwritten. Cached audit results alone never authorize conversion.
 
 The notebooks contain explicit switches before downloading pretrained weights,
 training, and final test evaluation. They do not download datasets. Before a Git

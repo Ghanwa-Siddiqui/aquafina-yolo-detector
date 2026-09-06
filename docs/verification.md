@@ -5,13 +5,18 @@ available. PyTorch/CUDA are not installed in the local project environment.
 
 Completed locally:
 
-- 45 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
+- 62 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
+- Archive fixtures verify a single sequential source read, MD5 mismatch rejection,
+  safe local extraction, unchanged original inputs, complete-stage reuse and
+  rejection of modified stages. Cache tests verify reuse without a full audit,
+  conversion from cached state, stale/corrupt/blocked cache rejection, explicit
+  forced re-audit, interrupted-audit handling and the 250-image progress interval.
 - TempleRAIL fixtures cover corrupt train-list reconstruction (including the exact
   4,000/870 count invariant), original validation preservation, dog exclusions,
   class/coordinate mapping, hard negatives, corrupt input rejection, confirmation,
   stale audits, cross-split duplicate content and raw-file immutability. Incomplete
   conversions are rejected, and a train/val-only conversion passes the verifier.
-- Notebook 01's read-only setup/audit/preview order and confirmation gate are tested.
+- Notebook 01's setup/stage/audit-cache/preview order and conversion gate are tested.
 - The actual COCO evaluator returns AP=1 for perfect boxes and AP=0 for disjoint
   boxes. Annotation ID 0 is rejected because COCO uses it as an unmatched sentinel.
 
@@ -29,7 +34,8 @@ Completed locally:
 
 Pending in Colab (not claimed as passed):
 
-- Run notebook 01 against the actual TempleRAIL Drive dataset. The user-provided
+- Run notebook 01 against the actual TempleRAIL Drive archive. MD5 verification and
+  elapsed performance on that archive have not been measured locally. The user-provided
   inventory is encoded as the expected baseline, but the new pairing/geometry and
   content-hash audit has only run on local fixtures. No real source files were
   accessed or converted locally.

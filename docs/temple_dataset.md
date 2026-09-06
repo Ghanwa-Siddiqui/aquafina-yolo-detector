@@ -2,10 +2,41 @@
 
 ## Source and expectations
 
-Raw root: `/content/drive/MyDrive/aquafina-yolo/raw/temple/extracted/detection_dataset`.
+Original archive: `/content/drive/MyDrive/aquafina-yolo/raw/temple/detection_dataset.tar.gz`.
+Expected MD5: `fca7260d4785af1dec18aa320fa9fc4a`.
+The existing Drive extraction under `raw/temple/extracted/detection_dataset` is
+left untouched. Notebook audit input is `/content/temple_stage/detection_dataset`.
 Processed root: `/content/drive/MyDrive/aquafina-yolo/processed/temple`.
 The audit uses Pillow and standard-library XML parsing, never a YOLO framework.
-It does not download anything or modify/save any file. Preview images stay in RAM.
+The core audit does not download or write files. Its staging/cache wrapper copies
+one archive to temporary disk and saves completed audit state to Drive. Preview
+images stay in RAM. These writes do not modify the original raw archive or dataset.
+
+## Staging and reusable audits
+
+`temple_stage.stage_archive` reads the source archive once sequentially, copying
+to `/content/temple_stage` while calculating MD5 and SHA256. A mismatched MD5 stops
+before extraction. Extract only regular files/directories rooted at detection_dataset;
+reject traversal, absolute paths, links, devices and duplicate file entries. Hash
+each extracted file as it is written. No per-file copying from the Drive extraction
+occurs. A completed local stage can be reused after archive/local hash checks.
+Temporary disk needs room for both the compressed archive and extracted files.
+
+`temple_stage.audit_staged` caches the full completed report, records, anomalies,
+class counts, split IDs and file hashes in one atomic JSON envelope at
+`/content/drive/MyDrive/aquafina-yolo/cache/temple_audit/<archive-md5>.json`.
+Reuse requires matching archive MD5/SHA256, source-code/policy signature, payload
+checksum and staged-file hashes, plus a successful audit with no blocking errors.
+These are integrity checks, not authentication of externally supplied cache files.
+Do not import caches from untrusted sources. Blocked reports can be inspected but
+are not considered reusable verified audits. Incomplete/stale/corrupt cache files
+cause a fresh local audit. Interrupted audits never publish a completed cache.
+
+Set REUSE_AUDIT_CACHE=False in notebook 01 to force a fresh audit. A new Colab
+runtime must restage/verify the archive, but a compatible Drive cache still avoids
+image decoding and XML/Darknet checks. Fresh audits report every 250 images and
+the final image count; all per-file integrity checks run against local temporary
+storage. Code/policy changes intentionally invalidate prior cached decisions.
 
 The default audit enforces the user's verified image/XML/TXT and Darknet instance
 counts. TXT counts include the whole source tree, not just label files. Image and
@@ -75,7 +106,7 @@ labels here, not a completed independent visual inspection.
 ## Writes and manifests
 
 Conversion requires explicit `confirm=True` at the Python API and
-`CONFIRM_CONVERSION=True` after audit/preview in notebook 01. Recheck raw hashes
+`CONFIRM_CONVERSION=True` after audit/preview in notebook 01. Recheck staged-input hashes
 before writing. Refuse existing destinations, destinations inside raw, or an
 ancestor of raw; resolve paths to prevent symlink redirects. Copy images (never
 symlink them) to train2017/val2017. Do not move or edit raw files.
@@ -86,11 +117,13 @@ the pipeline-compatible `split_manifest.json`. Manifest entries retain source ID
 canonical numeric IDs, filenames and image hashes. Original validation membership
 is directly reviewable in `val_manifest.json`.
 
-Validate the completed canonical dataset and compare all raw hashes again. Write
+Validate the completed canonical dataset and compare all staged-input hashes again. Write
 `conversion.json` **last**, including complete status, counts and the raw-file hash
 snapshot. An absent marker means incomplete output; do not train from it. An audit
-report's `writes_performed=False` describes the preceding read-only audit, not the
-later confirmed conversion that persists that report.
+report's `writes_performed=False` describes the core read-only audit, not the
+wrapper's automatic cache save or the later confirmed conversion. Archive provenance
+is retained in audit.json. The original Drive extraction is not read again for
+these checks and is never modified or deleted.
 
 No input annotations.json is needed. No test set is produced. The generic COCO
 preparation API remains available for independent, manually annotated datasets.

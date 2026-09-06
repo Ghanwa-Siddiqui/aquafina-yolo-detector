@@ -21,6 +21,7 @@ EXPECTED = {"images": 4870, "xml": 4870, "txt": 4873, "train": 4000, "val": 870,
             "darknet_instances": {"Aquafina": 5227, "Deer": 4326, "Kirkland": 3552, "Nestle": 3735}}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
 PIXEL_TOLERANCE = 2.0  # VOC integer coordinates vs rounded normalized labels.
+PROGRESS_EVERY = 250
 
 
 @dataclass
@@ -200,12 +201,12 @@ def _crosscheck(objects, labels, issue, key):
     return [label for j, label in enumerate(labels) if j not in excluded]
 
 
-def audit_temple(root=TEMPLE_ROOT, expected=None):
+def audit_temple(root=TEMPLE_ROOT, expected=None, *, progress=None, _snapshot=None):
     """Inspect files read-only. `expected` overrides verified counts for fixtures."""
     from PIL import Image
     root = Path(root).resolve()
     expected = EXPECTED if expected is None else expected
-    snapshot = snapshot_raw(root)
+    snapshot = snapshot_raw(root) if _snapshot is None else dict(_snapshot)
     issues = []
 
     def issue(kind, severity, **details):
@@ -230,7 +231,11 @@ def audit_temple(root=TEMPLE_ROOT, expected=None):
         if counts[name] != expected[name]:
             issue("count_mismatch", "error", field=name, expected=expected[name], actual=counts[name])
     records, dn_counts, xml_counts, kept_counts = {}, Counter(), Counter(), Counter()
-    for key, image_path in images.items():
+    if progress:
+        progress(f"Auditing {len(images):,} images (local decoding, XML and Darknet checks)...")
+    for position, (key, image_path) in enumerate(images.items(), 1):
+        if progress and position > 1 and (position - 1) % PROGRESS_EVERY == 0:
+            progress(f"Audited {position - 1:,}/{len(images):,} images")
         try:
             with Image.open(image_path) as image:
                 image.load()
@@ -261,6 +266,8 @@ def audit_temple(root=TEMPLE_ROOT, expected=None):
         records[key] = {"source_id": key, "file_name": image_path.relative_to(root / "JPEGImages").as_posix(),
                         "width": width, "height": height, "labels": kept, "xml_objects": objects,
                         "subset": subset, "sha256": snapshot[image_path.relative_to(root).as_posix()]}
+    if progress:
+        progress(f"Audited {len(images):,}/{len(images):,} images; checking classes and splits...")
     for name, count in expected.get("darknet_instances", {}).items():
         if dn_counts[name] != count:
             issue("class_count_mismatch", "error", name=name, expected=count, actual=dn_counts[name])
@@ -362,6 +369,10 @@ def convert_temple(result, output=PROCESSED_ROOT, *, confirm=False):
     output = Path(output).resolve()
     if output == result.root or output.is_relative_to(result.root) or result.root.is_relative_to(output):
         raise ValueError("Processed output must be disjoint from the entire raw dataset directory")
+    if result.audit.get("original_archive"):
+        original_raw = Path(result.audit["original_archive"]).resolve().parent
+        if output.is_relative_to(original_raw) or original_raw.is_relative_to(output):
+            raise ValueError("Processed output must not overlap the original Drive raw directory")
     if output.exists():
         raise FileExistsError("Processed output exists; use a new version directory, never overwrite")
     if result.audit["blocking_errors"]:

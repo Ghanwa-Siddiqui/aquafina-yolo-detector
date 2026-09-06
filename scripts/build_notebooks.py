@@ -58,11 +58,13 @@ GPU_SETUP = [md("""
     """)]
 
 PREPARE = [md("""
-    # 01 — Audit, preview and convert TempleRAIL
+    # 01 — Stage, audit, preview and convert TempleRAIL
     No dataset downloads, GPU setup, weights, training or Ultralytics. A standard
-    Colab CPU session with its bundled Pillow is sufficient. Audit and preview
-    are read-only; nothing is saved until explicit confirmation in cell 9.
-    Raw XML/TXT/images are never modified. No input annotations.json is needed.
+    Colab CPU session with its bundled Pillow is sufficient. Read one archive from
+    Drive, verify MD5, extract to fast temporary disk and cache completed audits.
+    Original Drive archive and extracted data are never modified or deleted.
+    Staging/cache writes are automatic; dataset conversion still requires explicit
+    confirmation in cell 11. No input annotations.json is needed.
     """), md("""
     ## 1. Repository and Drive
     Upload and extract this repository's code to `/content/aquafina-yolo-detector`.
@@ -78,40 +80,73 @@ PREPARE = [md("""
     REPO = Path('/content/aquafina-yolo-detector')
     assert (REPO / 'pyproject.toml').is_file(), 'Extract repository code first'
     sys.path.insert(0, str(REPO / 'src'))
-    TEMPLE_ROOT = Path('/content/drive/MyDrive/aquafina-yolo/raw/temple/extracted/detection_dataset')
+    ARCHIVE = Path('/content/drive/MyDrive/aquafina-yolo/raw/temple/detection_dataset.tar.gz')
+    EXPECTED_MD5 = 'fca7260d4785af1dec18aa320fa9fc4a'
+    STAGE_DIR = Path('/content/temple_stage')
+    TEMPLE_ROOT = Path('/content/temple_stage/detection_dataset')
+    CACHE_DIR = Path('/content/drive/MyDrive/aquafina-yolo/cache/temple_audit')
     PROCESSED_ROOT = Path('/content/drive/MyDrive/aquafina-yolo/processed/temple')
-    from aquafina_detector.temple import audit_temple, preview_temple, convert_temple
+    from aquafina_detector.temple import preview_temple, convert_temple
+    from aquafina_detector.temple_stage import stage_archive, audit_staged
+    STAGE = None
     AUDIT = None
     PREVIEW_SHOWN = False
     CONVERSION_RESULT = None
-    print('Raw (read-only):', TEMPLE_ROOT)
+    print('Original archive (read-only):', ARCHIVE)
+    print('Temporary audit input:', TEMPLE_ROOT)
     print('Proposed output (not created):', PROCESSED_ROOT)
     """), md("""
-    ## 2. Read-only audit
+    ## 2. Verify archive and stage on temporary disk
+    Copy the single existing archive from Drive while calculating MD5 and SHA256.
+    A mismatch stops before extraction. Extract locally, never by copying thousands
+    of individual source files from Drive. Safe extraction rejects path traversal,
+    links and special files. An existing complete stage is checked locally before
+    reuse; interrupted/conflicting stages require a fresh runtime or stage path.
+    No original archive or extracted Drive dataset is deleted or modified.
+    """), code("""
+    AUDIT = None
+    PREVIEW_SHOWN = False
+    CONVERSION_RESULT = None
+    STAGE = None
+    STAGE = stage_archive(ARCHIVE, EXPECTED_MD5, STAGE_DIR,
+                          progress=lambda message: print(message, flush=True))
+    assert STAGE.root == TEMPLE_ROOT
+    print('Verified local input:', STAGE.root)
+    """), md("""
+    ## 3. Audit locally or reuse the completed verified cache
     Decode every image; check image/XML/TXT pairing, dimensions, boxes and classes.
-    Hash all raw files for immutability checks. This can take several minutes on
-    Drive. Ignore train.txt for membership: preserve unique val.txt IDs and use
+    All per-file checks now use temporary disk. Progress prints after every 250
+    images and on completion. Set REUSE_AUDIT_CACHE=False to force a fresh audit.
+    A completed report is cached in Drive under the archive MD5; reuse requires
+    matching archive hashes, audit-code signature, policy and staged-file hashes.
+    Incomplete, corrupt, stale or blocked results never bypass a fresh audit.
+    Ignore train.txt for membership: preserve unique val.txt IDs and use
     all JPEGImages IDs minus validation. Expect 4,000 train / 870 val / zero overlap.
     Known dog and corrupt-train-list warnings do not alone block conversion.
     Unexplained class/geometry mismatches and cross-split identical images do block it.
     """), code("""
     import json
+    AUDIT = None
     PREVIEW_SHOWN = False
     CONVERSION_RESULT = None
-    AUDIT = audit_temple(TEMPLE_ROOT)
+    assert STAGE is not None, 'Run staging cell 5 first'
+    REUSE_AUDIT_CACHE = True
+    AUDIT = audit_staged(STAGE, CACHE_DIR, reuse=REUSE_AUDIT_CACHE,
+                         progress=lambda message: print(message, flush=True))
     print(json.dumps(AUDIT.audit, indent=2))
     print(json.dumps(AUDIT.class_counts, indent=2))
     print(json.dumps(AUDIT.anomalies, indent=2))
-    print('Audit is in memory only; no report files written.')
+    print('Completed audit cache:', CACHE_DIR / (STAGE.archive_md5 + '.json'))
     """), md("""
-    ## 3. Read-only preview
+    ## 4. Read-only preview from temporary disk
     Green: Aquafina boxes kept. Orange: competitor boxes become background.
     Red: XML dog box excluded. Samples prioritize the dog image and available
     positive/mixed/negative subsets. Inspect all reported anomalies, not just these
     samples. Source annotations do not prove visible brand identity in every image.
     """), code("""
     from IPython.display import display
-    assert AUDIT is not None, 'Run audit cell 5 first'
+    PREVIEW_SHOWN = False
+    assert AUDIT is not None, 'Run audit cell 7 first'
     previews = preview_temple(AUDIT, limit=8)
     for caption, image in previews:
         print(caption)
@@ -119,9 +154,9 @@ PREPARE = [md("""
     PREVIEW_SHOWN = bool(previews)
     print('Preview displayed; nothing saved. Blocking errors:', AUDIT.audit['blocking_errors'])
     """), md("""
-    ## 4. Explicit confirmation before the first output write
+    ## 5. Explicit confirmation before converted-dataset writes
     After reviewing audit and preview, change CONFIRM_CONVERSION to True and run
-    cell 9. Keep it False to remain read-only. A clean audit and completed preview
+    cell 11. Keep it False to skip conversion. A clean audit and completed preview
     are required. Conversion writes exclusively under PROCESSED_ROOT, copies images
     (no raw symlinks), and checks raw hashes before/after. Existing output is never
     overwritten; use a new child/version path for another conversion.
@@ -132,14 +167,14 @@ PREPARE = [md("""
     """), code("""
     CONFIRM_CONVERSION = False
     if not CONFIRM_CONVERSION:
-        print('Read-only mode: conversion not confirmed; no output written.')
+        print('Conversion not confirmed; no converted dataset written. Staging/audit cache are retained.')
     else:
-        assert AUDIT is not None and PREVIEW_SHOWN, 'Run audit cell 5 and preview cell 7 first'
+        assert AUDIT is not None and PREVIEW_SHOWN, 'Run audit cell 7 and preview cell 9 first'
         assert AUDIT.audit['blocking_errors'] == 0, 'Resolve blocking audit errors before conversion'
         CONVERSION_RESULT = convert_temple(AUDIT, PROCESSED_ROOT, confirm=True)
         print(json.dumps(CONVERSION_RESULT, indent=2))
     """), md("""
-    ## 5. Read back completed outputs
+    ## 6. Read back completed outputs
     audit.json, anomaly_report.json, class_counts.json, train_manifest.json,
     val_manifest.json, split_manifest.json and conversion.json accompany the
     annotations/train.json, annotations/val.json and train2017/val2017 images.

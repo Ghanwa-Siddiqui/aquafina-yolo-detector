@@ -207,12 +207,16 @@ def test_notebook_has_readonly_order_and_exact_paths():
     repo = Path(__file__).resolve().parents[1]
     doc = json.loads((repo / "notebooks/01_prepare_data.ipynb").read_text())
     code = ["".join(cell["source"]) for cell in doc["cells"] if cell["cell_type"] == "code"]
-    assert "raw/temple/extracted/detection_dataset" in code[0]
+    assert "raw/temple/detection_dataset.tar.gz" in code[0]
+    assert "/content/temple_stage/detection_dataset" in code[0]
+    assert "fca7260d4785af1dec18aa320fa9fc4a" in code[0]
     assert "/content/drive/MyDrive/aquafina-yolo/processed/temple" in code[0]
     assert "sys.dont_write_bytecode = True" in code[0]
-    assert "audit_temple(TEMPLE_ROOT)" in code[1]
-    assert "preview_temple(AUDIT" in code[2]
-    assert "CONFIRM_CONVERSION = False" in code[3]
-    assert "convert_temple(AUDIT" in code[3]
-    before_conversion = "\n".join(code[:3])
+    assert "stage_archive(ARCHIVE" in code[1]
+    assert "audit_staged(STAGE" in code[2]
+    assert "REUSE_AUDIT_CACHE = True" in code[2]
+    assert "preview_temple(AUDIT" in code[3]
+    assert "CONFIRM_CONVERSION = False" in code[4]
+    assert "convert_temple(AUDIT" in code[4]
+    before_conversion = "\n".join(code[:4])
     assert all(token not in before_conversion for token in ("write_json(", ".mkdir(", "pip", "annotations.json"))

@@ -3,7 +3,8 @@
 ## Prepare code and storage
 
 Notebook 01 needs only a standard Colab **CPU** session and its bundled Pillow.
-It does not install packages or write audit outputs before audit/preview review.
+It does not install packages. Archive staging and audit caching are automatic;
+converted-dataset writes still require confirmation after audit/preview review.
 For future notebooks 02/03, select a GPU runtime. The pinned stack targets Python 3.10–3.12, PyTorch
 2.5.1 / torchvision 0.20.1 with CUDA 12.1 wheels. The installer fails on unsupported
 Python versions; these pins have not yet been verified in a fresh Colab runtime.
@@ -17,12 +18,14 @@ Colab never needs to commit or push your code.
 
 ```text
 /content/drive/MyDrive/aquafina-yolo/
-  raw/temple/extracted/detection_dataset/   Immutable TempleRAIL source
+  raw/temple/detection_dataset.tar.gz       Read-only source archive
+  raw/temple/extracted/detection_dataset/   Existing extraction, left untouched
     JPEGImages/                     4,870 images
     Annotations/                    4,870 XML annotations
     Labels/                         Paired Darknet TXT labels
     ImageSets/Main/                 Original train.txt and val.txt
     Readme.txt
+  cache/temple_audit/<archive-md5>.json     Completed audit state, automatically saved
   processed/temple/                 Confirmed conversion output
     train2017/                     4,000 copied training images
     val2017/                       870 copied validation images
@@ -49,18 +52,46 @@ installed through upstream's optional ONNX dependencies. Restart the notebook
 session if Colab says existing imports changed, then rerun path setup and audit.
 Avoid importing NumPy or PyTorch before setup in a fresh session.
 
-## Notebook 01: audit, preview, then confirmed conversion
+## Notebook 01: stage locally, audit/cache, preview, then confirmed conversion
 
 Use the updated local `notebooks/01_prepare_data.ipynb`. Cell numbers count both
 markdown and code cells. Run this exact order:
 
 | Cell | Action | Expected output |
 |---|---|---|
-| 3 | Mount Drive, import lightweight audit code, set exact TEMPLE_ROOT/PROCESSED_ROOT | Mounted Drive and the two paths; no output folder created |
-| 5 | Read-only audit and split reconstruction | Counts, pairing/dimensions/box/class checks, source train-list anomaly and dog report printed in memory |
-| 7 | Read-only sample preview | Up to eight images: green Aquafina, orange competitors/background, red excluded dog |
-| 9 | Leave CONFIRM_CONVERSION=False for read-only mode; set True only after review | False: no writes. True: converted train/val summaries, output path, raw_unchanged=True |
-| 11 | Read completion marker | complete, train_images=4000, val_images=870, raw_sha256_before_after_equal=True and output listing |
+| 3 | Mount Drive and set archive, stage, cache and output paths | Mounted Drive and proposed paths |
+| 5 | Sequentially copy/hash one archive, verify MD5, safely extract locally | MD5 verified, extraction progress, local input at /content/temple_stage/detection_dataset |
+| 7 | Reuse eligible audit cache or perform full local audit | Cache-hit message OR progress every 250 images, counts, anomalies and cache-save path |
+| 9 | Read-only local preview | Up to eight images: green Aquafina, orange competitors/background, red excluded dog |
+| 11 | Leave CONFIRM_CONVERSION=False to skip conversion; set True only after review | False: staging/cache retained, no converted dataset. True: converted summaries and raw_unchanged=True |
+| 13 | Read completion marker | complete, train_images=4000, val_images=870, raw_sha256_before_after_equal=True and output listing |
+
+The archive must be exactly:
+`/content/drive/MyDrive/aquafina-yolo/raw/temple/detection_dataset.tar.gz`.
+Verify MD5 `fca7260d4785af1dec18aa320fa9fc4a` before extracting. A mismatch stops
+without extraction and prints the actual hash. Do not disable this check.
+
+Temporary files live under `/content/temple_stage`; audit input is
+`/content/temple_stage/detection_dataset`. The single source archive is read once
+per staging invocation, computing MD5 and SHA256 while copying. No thousands-file
+copy from the Drive extraction occurs. Local files are hashed while extracting.
+An existing completed local extraction is checked before reuse. A fresh Colab
+runtime restages from the same archive; it can still reuse the Drive audit cache.
+
+Cache file:
+`/content/drive/MyDrive/aquafina-yolo/cache/temple_audit/fca7260d4785af1dec18aa320fa9fc4a.json`.
+Set `REUSE_AUDIT_CACHE=True` (default) in cell 7. Reuse requires the same verified
+MD5 **and** SHA256, matching audit source-code/expected-counts signature, intact
+cache payload, matching local file hashes and zero blocking audit errors. It skips
+image decoding and XML/label cross-checking, not archive verification or local
+integrity checks. Set False to force a fresh audit. Completed blocked reports are
+cached for inspection but are never reused as verified audits. Interrupted audits
+do not create a completed cache; corrupt or stale cache entries trigger a fresh audit.
+
+Fresh-audit progress includes `Audited 250/4,870 images`, `500/4,870`, and so on
+through `4,750/4,870`, followed by `4,870/4,870`. Archive copy/extraction also prints
+progress. The actual Drive archive has not been staged or timed from local Codex;
+no runtime speed guarantee is implied by the fixture tests.
 
 Expected audit from the supplied inventory: 4,870 images, 4,870 XML, 4,873 TXT
 files **across the whole raw tree**, zero XML parsing errors and zero invalid
@@ -77,11 +108,18 @@ unique `val.txt` IDs and discovers IDs from `JPEGImages`; it asserts exactly
 or fake test set occurs. Notebook 03 refuses final test evaluation without an
 independent test file.
 
-Read [the full conversion policy](temple_dataset.md) before confirmation. Audit and
-preview do not create directories, reports, caches or install dependencies from
-the notebook. Mounting Drive establishes access; the first explicit output write
-is inside confirmed conversion. Raw files are hashed during audit and rechecked
-before and after conversion. This is IO-intensive and can take minutes on Drive.
+Read [the full conversion policy](temple_dataset.md) before confirmation. The audit
+itself reads staged files only; its wrapper saves completed audit state to Drive.
+Preview images stay in memory. Staging/cache writes precede confirmation, while
+permanent converted output remains gated. The original archive and original Drive
+extraction are never modified or deleted. Conversion rechecks its **local staged
+input** hashes before/after; it does not walk the original Drive extraction.
+Writing and verifying the permanent converted images still uses Drive and may be
+slow; this optimization removes per-file Drive reads from the audit path.
+
+Interrupted extraction is never reused as complete. Restart the runtime or choose
+a fresh temporary stage path (and update TEMPLE_ROOT accordingly) if a conflict is
+reported. No automatic cleanup deletes original inputs or conflicting stages.
 
 Known dog/train-list anomalies are warnings. Unexplained class/box mismatches,
 invalid pairs/dimensions, wrong counts and cross-split duplicate image contents
