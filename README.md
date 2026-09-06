@@ -64,7 +64,12 @@ Do not place real datasets/weights in the repository even if ignored by Git.
 - MixUp and horizontal flipping disabled to preserve brand evidence.
 - TempleRAIL: retain the 870 unique original validation IDs and reconstruct 4,000
   training IDs as all 4,870 image IDs minus validation. Ignore corrupt `train.txt`
-  membership. Assert zero ID overlap; flag identical image content across splits.
+  membership. Retain validation representatives of the 9 exact SHA-256 duplicate
+  groups after verifying both complete annotation sets, excluding 9 training copies.
+  Processed counts: **3,991 train / 870 validation**, with zero cross-split content
+  overlap. Conflicting or ambiguous groups remain blocking; raw files are untouched.
+  Exclusions are recorded in anomaly_report.json. The new code/policy key invalidates
+  previous audit caches; rerun notebook 01 cells 3, 5, 7 and 9 before confirmation.
   There is no TempleRAIL test split. The generic COCO `prepare` API still supports
   its original 70/15/15 grouped split for other datasets.
 - Only source Darknet class 0 (Aquafina) becomes a positive. Deer, Kirkland and

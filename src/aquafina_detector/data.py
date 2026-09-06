@@ -171,6 +171,24 @@ def verify_prepared(root, *, require_complete=True):
         marker = root / "conversion.json"
         if not marker.is_file() or read_json(marker).get("status") != "complete":
             raise ValueError("TempleRAIL conversion is incomplete: missing complete conversion.json")
+        from .temple import DUPLICATE_POLICY_VERSION
+        completion = read_json(marker)
+        audit = read_json(root / "audit.json")["splits"]
+        exclusions = read_json(root / "anomaly_report.json")["excluded_training_images"]
+        train_ids = manifest["splits"]["train"]["source_ids"]
+        val_ids = manifest["splits"]["val"]["source_ids"]
+        if (completion.get("duplicate_policy_version") != DUPLICATE_POLICY_VERSION
+                or completion.get("train_images") != len(train_ids)
+                or completion.get("val_images") != len(val_ids)
+                or len(train_ids) != audit["expected_processed_train"]
+                or len(val_ids) != audit["expected_processed_val"]
+                or sorted(val_ids) != audit["original_validation_ids"]
+                or completion.get("excluded_training_images") != len(exclusions)
+                or completion.get("cross_split_duplicate_content") != 0
+                or not completion.get("validation_ids_preserved")
+                or not completion.get("raw_sha256_before_after_equal")
+                or {item["image_id"] for item in exclusions} & set(train_ids + val_ids)):
+            raise ValueError("TempleRAIL duplicate policy completion checks failed")
     group_owner, hash_owner, image_owner = {}, {}, {}
     annotation_hashes = {}
     available = set(manifest["splits"])

@@ -18,10 +18,62 @@ TEMPLE_ROOT = Path("/content/drive/MyDrive/aquafina-yolo/raw/temple/extracted/de
 PROCESSED_ROOT = Path("/content/drive/MyDrive/aquafina-yolo/processed/temple")
 CLASSES = {0: "Aquafina", 1: "Deer", 2: "Kirkland", 3: "Nestle"}
 EXPECTED = {"images": 4870, "xml": 4870, "txt": 4873, "train": 4000, "val": 870,
+            "processed_train": 3991, "cross_split_groups": 9, "excluded_train": 9,
             "darknet_instances": {"Aquafina": 5227, "Deer": 4326, "Kirkland": 3552, "Nestle": 3735}}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
 PIXEL_TOLERANCE = 2.0  # VOC integer coordinates vs rounded normalized labels.
 PROGRESS_EVERY = 250
+DUPLICATE_POLICY_VERSION = "validation-priority-paired-annotations-v1"
+
+
+def _annotation_signature(record, source):
+    # Compare complete annotations, including competitors and dog, ignoring order.
+    # Across identical images require exact parsed geometry; the 2-pixel VOC
+    # tolerance applies only to XML/Darknet pairing within an individual image.
+    return sorted((str(obj.get("name", obj["class_id"])).casefold(),
+                   tuple(obj["bbox_xyxy"])) for obj in record[source])
+
+
+def resolve_duplicates(records, train_ids, val_ids, issue):
+    """Resolve only uniquely represented, annotation-equivalent validation groups."""
+    train, val = set(train_ids), set(val_ids)
+    groups = defaultdict(list)
+    for key in sorted(train | val):
+        if key in records:
+            groups[records[key]["sha256"]].append(key)
+    excluded, crossing = [], 0
+    for digest, ids in sorted(groups.items()):
+        if len(ids) < 2:
+            continue
+        training, validation = sorted(train.intersection(ids)), sorted(val.intersection(ids))
+        crossing += bool(training and validation)
+        details = {"sha256": digest, "image_ids": ids}
+        if len(validation) > 1:
+            issue("multiple_validation_duplicates", "error", **details)
+            continue
+        if train & val or any(not records[key].get("paired_annotations_verified") for key in ids):
+            issue("ambiguous_duplicate_group", "error", **details)
+            continue
+        first = records[ids[0]]
+        equivalent = all(
+            (records[key]["width"], records[key]["height"]) == (first["width"], first["height"])
+            and all(_annotation_signature(records[key], source) == _annotation_signature(first, source)
+                    for source in ("xml_objects", "darknet_labels")) for key in ids[1:])
+        if not equivalent:
+            issue("conflicting_duplicate_annotations", "error", **details)
+            continue
+        if training and validation:
+            for key in training:
+                excluded.append({"image_id": key, "retained_validation_id": validation[0],
+                                 "sha256": digest,
+                                 "reason": "Exact-content duplicate with equivalent paired XML and Darknet annotations; preserve validation"})
+            issue("cross_split_duplicate_resolved", "warning", **details,
+                  retained_validation_id=validation[0], excluded_training_ids=training)
+    excluded.sort(key=lambda item: item["image_id"])
+    remaining = sorted(train - {item["image_id"] for item in excluded})
+    overlap = {records[k]["sha256"] for k in remaining if k in records} & {
+        records[k]["sha256"] for k in val if k in records}
+    return remaining, excluded, crossing, len(overlap)
 
 
 @dataclass
@@ -265,6 +317,8 @@ def audit_temple(root=TEMPLE_ROOT, expected=None, *, progress=None, _snapshot=No
             "competitor" if competitor else "empty")
         records[key] = {"source_id": key, "file_name": image_path.relative_to(root / "JPEGImages").as_posix(),
                         "width": width, "height": height, "labels": kept, "xml_objects": objects,
+                        "darknet_labels": darknet,
+                        "paired_annotations_verified": not any(i["severity"] == "error" and i.get("image_id") == key for i in issues),
                         "subset": subset, "sha256": snapshot[image_path.relative_to(root).as_posix()]}
     if progress:
         progress(f"Audited {len(images):,}/{len(images):,} images; checking classes and splits...")
@@ -297,15 +351,26 @@ def audit_temple(root=TEMPLE_ROOT, expected=None, *, progress=None, _snapshot=No
         train_ids, val_ids = [], []
     split_report.update({"train_count": len(train_ids), "val_count": len(val_ids),
                          "reconstructed_overlap": len(set(train_ids) & set(val_ids)), "test_count": 0})
-    owners = defaultdict(set)
-    for name, ids in (("train", train_ids), ("val", val_ids)):
-        for key in ids:
-            if key in records:
-                owners[records[key]["sha256"]].add(name)
-    for digest, splits in owners.items():
-        if len(splits) > 1:
-            issue("cross_split_duplicate_content", "error", sha256=digest,
-                  image_ids=[key for key, record in records.items() if record["sha256"] == digest])
+    train_ids, exclusions, crossing, content_overlap = resolve_duplicates(records, train_ids, val_ids, issue)
+    split_report.update({"policy": split_report["policy"] + "; exclude verified equivalent training duplicates of unique validation representatives",
+                         "duplicate_policy_version": DUPLICATE_POLICY_VERSION,
+                         "original_validation_ids": sorted(set(original_val)),
+                         "processed_train_count": len(train_ids), "processed_val_count": len(val_ids),
+                         "cross_split_groups_before_policy": crossing,
+                         "excluded_training_count": len(exclusions),
+                         "cross_split_duplicate_content": content_overlap,
+                         "expected_processed_train": expected.get("processed_train", expected["train"]),
+                         "expected_processed_val": expected["val"]})
+    for field, actual, wanted in (
+            ("processed_train", len(train_ids), expected.get("processed_train", expected["train"])),
+            ("cross_split_groups", crossing, expected.get("cross_split_groups", 0)),
+            ("excluded_train", len(exclusions), expected.get("excluded_train", 0))):
+        if actual != wanted:
+            issue("duplicate_policy_count_mismatch", "error", field=field, expected=wanted, actual=actual)
+    if content_overlap:
+        issue("cross_split_duplicate_content", "error", groups=content_overlap)
+    processed_records = [records[k] for k in train_ids + val_ids if k in records]
+    processed_counts = Counter(CLASSES[label["class_id"]] for record in processed_records for label in record["labels"])
     summary = {"source": "TempleRAIL", "raw_root": str(root), "counts": counts,
                "pairing": {"missing_or_orphan": sum(i["kind"] in {"missing_pair", "orphan_annotation"} for i in issues)},
                "splits": split_report,
@@ -323,11 +388,14 @@ def audit_temple(root=TEMPLE_ROOT, expected=None, *, progress=None, _snapshot=No
     class_counts = {"darknet_class_mapping": CLASSES, "darknet_instances": dict(dn_counts),
                     "xml_instances_by_original_name": dict(xml_counts),
                     "after_dog_exclusion": dict(kept_counts),
-                    "aquafina_instances_to_convert": kept_counts["Aquafina"],
+                    "after_duplicate_exclusion": dict(processed_counts),
+                    "aquafina_instances_to_convert": processed_counts["Aquafina"],
                     "canonical_mapping": {"source_darknet": 0, "model_class": 0, "coco_category": 1},
-                    "image_subsets": dict(Counter(r["subset"] for r in records.values()))}
+                    "image_subsets": dict(Counter(r["subset"] for r in processed_records))}
     return TempleAudit(root, records, train_ids, val_ids, snapshot, summary,
-                       {"issues": issues, "raw_xml_modified": False}, class_counts)
+                       {"issues": issues, "raw_xml_modified": False,
+                        "duplicate_policy_version": DUPLICATE_POLICY_VERSION,
+                        "excluded_training_images": exclusions}, class_counts)
 
 
 def preview_temple(result, limit=8):
@@ -379,6 +447,17 @@ def convert_temple(result, output=PROCESSED_ROOT, *, confirm=False):
         raise ValueError("Audit has blocking errors; inspect the in-memory anomaly report before converting")
     if snapshot_raw(result.root) != result.snapshot:
         raise ValueError("Raw data changed after audit; rerun audit and preview")
+    splits = result.audit["splits"]
+    excluded = result.anomalies["excluded_training_images"]
+    content_overlap = {result.records[k]["sha256"] for k in result.train_ids} & {
+        result.records[k]["sha256"] for k in result.val_ids}
+    if (splits["duplicate_policy_version"] != DUPLICATE_POLICY_VERSION
+            or len(result.train_ids) != splits["expected_processed_train"]
+            or len(result.val_ids) != splits["expected_processed_val"]
+            or sorted(result.val_ids) != splits["original_validation_ids"]
+            or set(result.train_ids) & set(result.val_ids) or content_overlap
+            or {item["image_id"] for item in excluded} & set(result.train_ids + result.val_ids)):
+        raise ValueError("Duplicate policy completion checks failed before conversion")
     numeric_ids = {key: i + 1 for i, key in enumerate(sorted(result.records))}
     datasets, manifests = {}, {}
     for split, ids in (("train", result.train_ids), ("val", result.val_ids)):
@@ -424,6 +503,9 @@ def convert_temple(result, output=PROCESSED_ROOT, *, confirm=False):
         raise RuntimeError("Raw files changed during conversion; output is not verified")
     write_json(output / "conversion.json", {"status": "complete", "raw_sha256_before_after_equal": True,
                "train_images": len(result.train_ids), "val_images": len(result.val_ids),
-               "source_file_sha256": result.snapshot})
+               "source_file_sha256": result.snapshot,
+               "duplicate_policy_version": DUPLICATE_POLICY_VERSION,
+               "excluded_training_images": len(excluded),
+               "validation_ids_preserved": True, "cross_split_duplicate_content": 0})
     return {"output": str(output), "train": manifests["train"]["summary"],
             "val": manifests["val"]["summary"], "raw_unchanged": True, "test_split": None}

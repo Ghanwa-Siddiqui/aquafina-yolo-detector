@@ -5,7 +5,7 @@ available. PyTorch/CUDA are not installed in the local project environment.
 
 Completed locally:
 
-- 62 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
+- 72 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
 - Archive fixtures verify a single sequential source read, MD5 mismatch rejection,
   safe local extraction, unchanged original inputs, complete-stage reuse and
   rejection of modified stages. Cache tests verify reuse without a full audit,
@@ -14,9 +14,15 @@ Completed locally:
 - TempleRAIL fixtures cover corrupt train-list reconstruction (including the exact
   4,000/870 count invariant), original validation preservation, dog exclusions,
   class/coordinate mapping, hard negatives, corrupt input rejection, confirmation,
-  stale audits, cross-split duplicate content and raw-file immutability. Incomplete
+  stale audits and raw-file immutability. Nine synthetic cross-split groups resolve
+  with unchanged validation membership; the full 4,870-ID fixture yields 3,991/870.
+  Conflicting XML/Darknet annotations, dog differences, ambiguous pairing, multiple
+  validation representatives and unexpected counts block conversion. Old cache
+  schemas/policy keys are rejected; tampered completion counts are rejected. Incomplete
   conversions are rejected, and a train/val-only conversion passes the verifier.
 - Notebook 01's setup/stage/audit-cache/preview order and conversion gate are tested.
+  All 26 source/notebook files pass syntax and clean-output validation.
+  This policy was tested locally only; no real Drive conversion or training ran.
 - The actual COCO evaluator returns AP=1 for perfect boxes and AP=0 for disjoint
   boxes. Annotation ID 0 is rejected because COCO uses it as an unmatched sentinel.
 

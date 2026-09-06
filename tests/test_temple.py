@@ -195,12 +195,14 @@ def test_confirmation_raw_destination_and_stale_audit_guards(temple, tmp_path):
     assert not output.exists()
 
 
-def test_identical_image_content_across_original_splits_blocks(temple):
+def test_identical_image_content_across_original_splits_resolves(temple):
     root, expected = temple
     (root / "JPEGImages/img5.jpg").write_bytes((root / "JPEGImages/img0.jpg").read_bytes())
     audit = audit_temple(root, expected)
     assert audit.audit["splits"]["reconstructed_overlap"] == 0
-    assert any(i["kind"] == "cross_split_duplicate_content" for i in audit.anomalies["issues"])
+    assert audit.train_ids == ["img1", "img2", "img3"]
+    assert audit.anomalies["excluded_training_images"][0]["retained_validation_id"] == "img5"
+    assert audit.audit["splits"]["cross_split_duplicate_content"] == 0
 
 
 def test_notebook_has_readonly_order_and_exact_paths():

@@ -27,7 +27,7 @@ Colab never needs to commit or push your code.
     Readme.txt
   cache/temple_audit/<archive-md5>.json     Completed audit state, automatically saved
   processed/temple/                 Confirmed conversion output
-    train2017/                     4,000 copied training images
+    train2017/                     3,991 copied training images
     val2017/                       870 copied validation images
     annotations/train.json         Single-category COCO
     annotations/val.json
@@ -64,7 +64,7 @@ markdown and code cells. Run this exact order:
 | 7 | Reuse eligible audit cache or perform full local audit | Cache-hit message OR progress every 250 images, counts, anomalies and cache-save path |
 | 9 | Read-only local preview | Up to eight images: green Aquafina, orange competitors/background, red excluded dog |
 | 11 | Leave CONFIRM_CONVERSION=False to skip conversion; set True only after review | False: staging/cache retained, no converted dataset. True: converted summaries and raw_unchanged=True |
-| 13 | Read completion marker | complete, train_images=4000, val_images=870, raw_sha256_before_after_equal=True and output listing |
+| 13 | Read completion marker | complete, train_images=3991, val_images=870, excluded_training_images=9, cross_split_duplicate_content=0, raw_sha256_before_after_equal=True and output listing |
 
 The archive must be exactly:
 `/content/drive/MyDrive/aquafina-yolo/raw/temple/detection_dataset.tar.gz`.
@@ -98,13 +98,19 @@ files **across the whole raw tree**, zero XML parsing errors and zero invalid
 Darknet lines. Source class counts: Aquafina 5,227, Deer 4,326, Kirkland 3,552,
 Nestle 3,735. One XML dog is flagged and excluded; its raw XML is unchanged.
 Additional pairing, class/geometry, decoding and cross-split content checks must
-also pass. These extra checks have not yet been run against the actual Drive data.
+also pass. The user reports a completed real audit with 9 crossing duplicate
+groups; this updated resolution policy has only been tested on local fixtures.
 
 The original train list should report 13,740 entries, 4,870 unique IDs, 8,870
 duplicate entries, 4,870 IDs occurring more than once, and overlap with all 870
 validation IDs. It is inspected only for reporting. Reconstruction preserves the
 unique `val.txt` IDs and discovers IDs from `JPEGImages`; it asserts exactly
-4,000 training IDs, 870 validation IDs, and zero overlap. No random repartitioning
+4,000 training IDs, 870 validation IDs, and zero ID overlap. The completed real
+audit found 9 crossing SHA-256 duplicate groups. Verify paired XML and Darknet
+annotations, retain each unique validation representative, and exclude its training
+copy. Expect 3,991 processed train images and all 870 validation images, with zero
+cross-split duplicate content. Each exclusion and its retained counterpart, hash
+and reason appear in anomaly_report.json. No random repartitioning
 or fake test set occurs. Notebook 03 refuses final test evaluation without an
 independent test file.
 
@@ -122,8 +128,12 @@ a fresh temporary stage path (and update TEMPLE_ROOT accordingly) if a conflict 
 reported. No automatic cleanup deletes original inputs or conflicting stages.
 
 Known dog/train-list anomalies are warnings. Unexplained class/box mismatches,
-invalid pairs/dimensions, wrong counts and cross-split duplicate image contents
-block conversion. Inspect the printed anomaly report; no partial conversion is
+invalid pairs/dimensions, wrong counts, multiple validation representatives,
+ambiguous groups and conflicting duplicate annotations block conversion. The 9
+verified equivalent groups are resolvable warnings after policy application.
+The changed code/policy compatibility key invalidates the old audit cache; upload
+the updated repository, restart the Colab session to clear imported old code, then
+run cells 3, 5, 7 and 9 again. Cell 11 still defaults to CONFIRM_CONVERSION=False. Inspect the printed anomaly report; no partial conversion is
 started for a failed audit. A failed conversion after writing begins has no final
 completion marker. Use a fresh version path on retry rather than overwriting files.
 

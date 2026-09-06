@@ -13,13 +13,13 @@ import tarfile
 import tempfile
 
 from .common import contained, read_json, write_json
-from .temple import EXPECTED, TempleAudit, audit_temple, snapshot_raw
+from .temple import EXPECTED, DUPLICATE_POLICY_VERSION, TempleAudit, audit_temple, snapshot_raw
 
 ARCHIVE = Path("/content/drive/MyDrive/aquafina-yolo/raw/temple/detection_dataset.tar.gz")
 ARCHIVE_MD5 = "fca7260d4785af1dec18aa320fa9fc4a"
 STAGE_DIR = Path("/content/temple_stage")
 CACHE_DIR = Path("/content/drive/MyDrive/aquafina-yolo/cache/temple_audit")
-CACHE_SCHEMA = 1
+CACHE_SCHEMA = 2
 
 
 @dataclass
@@ -157,6 +157,7 @@ def stage_archive(archive=ARCHIVE, expected_md5=ARCHIVE_MD5, stage_dir=STAGE_DIR
 def audit_signature(expected):
     """Invalidate cached decisions if audit/validation/staging code or policy changes."""
     digest = hashlib.sha256()
+    digest.update(DUPLICATE_POLICY_VERSION.encode())
     for name in ("temple.py", "temple_stage.py", "data.py", "common.py", "__init__.py"):
         digest.update(name.encode())
         digest.update(Path(__file__).with_name(name).read_bytes())

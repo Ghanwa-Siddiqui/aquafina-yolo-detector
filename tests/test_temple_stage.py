@@ -117,7 +117,7 @@ def test_verified_cache_reused_without_decoding_and_can_convert(archive_fixture,
     assert original_snapshot == snapshot_raw(root)
 
 
-@pytest.mark.parametrize("problem", ["truncated", "signature", "digest", "blocked", "sha256", "force"])
+@pytest.mark.parametrize("problem", ["truncated", "signature", "digest", "blocked", "sha256", "force", "old_schema"])
 def test_stale_or_unverified_cache_does_not_skip_audit(archive_fixture, tmp_path, monkeypatch, problem):
     archive, md5, _, expected = archive_fixture
     stage = temple_stage.stage_archive(archive, md5, tmp_path / "stage", progress=None)
@@ -125,6 +125,8 @@ def test_stale_or_unverified_cache_does_not_skip_audit(archive_fixture, tmp_path
     temple_stage.audit_staged(stage, cache_dir, expected=expected, progress=None)
     cache = cache_dir / f"{md5}.json"
     envelope = read_json(cache)
+    if problem == "old_schema":
+        envelope["schema"] = 1
     if problem == "truncated":
         cache.write_text('{"unfinished":')
     else:

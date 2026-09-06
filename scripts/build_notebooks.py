@@ -121,9 +121,13 @@ PREPARE = [md("""
     matching archive hashes, audit-code signature, policy and staged-file hashes.
     Incomplete, corrupt, stale or blocked results never bypass a fresh audit.
     Ignore train.txt for membership: preserve unique val.txt IDs and use
-    all JPEGImages IDs minus validation. Expect 4,000 train / 870 val / zero overlap.
+    all JPEGImages IDs minus validation: initially 4,000 train / 870 val.
+    Resolve the 9 equivalent cross-split SHA-256 groups by retaining validation
+    and excluding 9 training copies: expect 3,991 train / 870 val / zero content overlap.
     Known dog and corrupt-train-list warnings do not alone block conversion.
-    Unexplained class/geometry mismatches and cross-split identical images do block it.
+    Multiple validation representatives, ambiguous groups, conflicting complete XML
+    or Darknet annotations, and unexpected counts still block conversion.
+    The changed code/policy compatibility key invalidates older audit caches.
     """), code("""
     import json
     AUDIT = None
@@ -162,7 +166,7 @@ PREPARE = [md("""
     overwritten; use a new child/version path for another conversion.
 
     Aquafina Darknet class 0 becomes model class 0 / COCO category 1. Keep every
-    image; competitor-only images have empty annotations, and mixed images retain
+    image except the verified training duplicates listed in excluded_training_images; competitor-only images have empty annotations, and mixed images retain
     Aquafina boxes only. Dog objects are excluded. No test split is manufactured.
     """), code("""
     CONFIRM_CONVERSION = False
@@ -186,7 +190,13 @@ PREPARE = [md("""
     else:
         from aquafina_detector.common import read_json
         marker = read_json(PROCESSED_ROOT / 'conversion.json')
-        print({key: marker[key] for key in ('status', 'train_images', 'val_images', 'raw_sha256_before_after_equal')})
+        from aquafina_detector.data import verify_prepared
+        verify_prepared(PROCESSED_ROOT)
+        assert marker['train_images'] == 3991 and marker['val_images'] == 870
+        assert marker['excluded_training_images'] == 9
+        assert marker['cross_split_duplicate_content'] == 0
+        assert marker['validation_ids_preserved'] and marker['raw_sha256_before_after_equal']
+        print(marker | {'source_file_sha256': '(omitted from display)'})
         print('Files:', sorted(path.name for path in PROCESSED_ROOT.iterdir()))
     """)]
 

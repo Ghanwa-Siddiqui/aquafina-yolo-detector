@@ -52,10 +52,25 @@ in `val.txt`; reject validation IDs missing from JPEGImages. Training is all 4,8
 discovered image IDs minus those validation IDs. Enforce 4,000/870 and zero overlap.
 All original validation IDs remain validation; no extra test split is manufactured.
 
-Exact duplicate images across these fixed splits block conversion rather than
-moving validation IDs silently. Identical image content within a split shares a
-hash-based group_id. Capture sessions and scene metadata were not supplied:
-`scene=temple_unspecified`; hash groups do not prove capture-session independence.
+Apply policy `validation-priority-paired-annotations-v1` after reconstruction.
+For each exact SHA-256 group crossing splits, require one validation representative
+and verified image/XML/Darknet pairing for every member. Compare complete XML and
+complete Darknet annotations separately, including competitors and dog exceptions.
+Ignore object order, line numbers, filename and class-name casing; require equal
+parsed coordinates and dimensions across copies. The 2-pixel XML/Darknet pairing
+tolerance does not excuse cross-copy annotation differences. Existing maximum
+1e-6 normalized boundary clamps remain allowed before this comparison.
+
+Retain the validation image and exclude all equivalent training members. The real
+audit expects 9 crossing groups and 9 exclusions, leaving **3,991 train / 870 val**
+and zero exact cross-split content overlap. Record each excluded `image_id`,
+`retained_validation_id`, `sha256` and `reason` in anomaly_report.json's
+`excluded_training_images`. No raw files are changed or deleted.
+Multiple validation representatives (even without training members), unverified
+pairs, conflicting annotations in any duplicate group, and unexpected counts
+remain blocking. Equivalent training-only groups remain in training and share a
+hash-based group_id. Hash groups do not prove capture-session independence.
+The source-code and policy compatibility signature invalidates old cached audits.
 Near-duplicate or scene leakage remains a manual review responsibility.
 
 ## Classes, coordinates and dog exception
@@ -85,12 +100,12 @@ Darknet box has no same-class XML match but matches that dog's geometry, exclude
 too and report its source class/line. This prevents an anomalous class-0 box from
 becoming Aquafina. A dog with no Darknet counterpart is simply reported/excluded.
 Known class matches take priority, so a nearby valid Aquafina object is retained.
-Reports show original counts and counts after dog exclusion separately; converted
-Aquafina count is 5,227 only if the dog exception does not remove a class-0 box.
+Reports distinguish original counts, counts after dog exclusion, and counts after
+duplicate exclusion. Converted Aquafina totals are computed from retained images.
 
 ## Hard negatives and visible-brand policy
 
-Keep every image in its reconstructed split. Images containing Deer/Kirkland/Nestle
+Keep every image in its reconstructed split except verified training duplicates. Images containing Deer/Kirkland/Nestle
 but no retained Aquafina get `subset=competitor`, with **empty annotations**. Mixed
 images get `mixed_brand` and only Aquafina boxes. Aquafina-only images get
 `visible_brand`. Remaining images are negatives. No competitor class is added to
