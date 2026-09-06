@@ -217,8 +217,11 @@ def test_notebook_has_readonly_order_and_exact_paths():
     assert "stage_archive(ARCHIVE" in code[1]
     assert "audit_staged(STAGE" in code[2]
     assert "REUSE_AUDIT_CACHE = True" in code[2]
-    assert "preview_temple(AUDIT" in code[3]
-    assert "CONFIRM_CONVERSION = False" in code[4]
-    assert "convert_temple(AUDIT" in code[4]
-    before_conversion = "\n".join(code[:4])
+    assert "duplicate_conflict_report(AUDIT" in code[3]
+    assert "render_duplicate_group(AUDIT" in code[3]
+    assert "save_duplicate_conflict_report(AUDIT" in code[3]
+    assert "preview_temple(AUDIT" in code[4]
+    assert "CONFIRM_CONVERSION = False" in code[5]
+    assert "convert_temple(AUDIT" in code[5]
+    before_conversion = "\n".join(code[:5])
     assert all(token not in before_conversion for token in ("write_json(", ".mkdir(", "pip", "annotations.json"))

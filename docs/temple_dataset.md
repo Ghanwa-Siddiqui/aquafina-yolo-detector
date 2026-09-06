@@ -62,7 +62,7 @@ tolerance does not excuse cross-copy annotation differences. Existing maximum
 1e-6 normalized boundary clamps remain allowed before this comparison.
 
 Retain the validation image and exclude all equivalent training members. The real
-audit expects 9 crossing groups and 9 exclusions, leaving **3,991 train / 870 val**
+policy requires 9 safely resolvable crossing groups and 9 exclusions, leaving **3,991 train / 870 val**
 and zero exact cross-split content overlap. Record each excluded `image_id`,
 `retained_validation_id`, `sha256` and `reason` in anomaly_report.json's
 `excluded_training_images`. No raw files are changed or deleted.
@@ -142,3 +142,13 @@ these checks and is never modified or deleted.
 
 No input annotations.json is needed. No test set is produced. The generic COCO
 preparation API remains available for independent, manually annotated datasets.
+
+## Current conflicting duplicates
+
+The completed real audit reports 37 groups with conflicting annotations, including
+9 crossing reconstructed splits. None qualify for exclusion: train remains 4,000,
+validation 870, exclusions 0, cross-split content overlap 9 and blocking errors 40.
+Do not relax the equivalence checks or convert these results. Notebook 01 cell 9
+provides read-only annotation comparisons and exports a separate diagnostic JSON.
+See [diagnostic interpretation and execution order](colab_workflow.md#duplicate-conflict-investigation-no-conversion).
+The report makes no annotation selection and cannot approve conversion.

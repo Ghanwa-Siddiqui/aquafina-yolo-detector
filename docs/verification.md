@@ -5,7 +5,7 @@ available. PyTorch/CUDA are not installed in the local project environment.
 
 Completed locally:
 
-- 72 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
+- 81 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
 - Archive fixtures verify a single sequential source read, MD5 mismatch rejection,
   safe local extraction, unchanged original inputs, complete-stage reuse and
   rejection of modified stages. Cache tests verify reuse without a full audit,
@@ -21,7 +21,7 @@ Completed locally:
   schemas/policy keys are rejected; tampered completion counts are rejected. Incomplete
   conversions are rejected, and a train/val-only conversion passes the verifier.
 - Notebook 01's setup/stage/audit-cache/preview order and conversion gate are tested.
-  All 26 source/notebook files pass syntax and clean-output validation.
+  All 28 source/notebook files pass syntax and clean-output validation.
   This policy was tested locally only; no real Drive conversion or training ran.
 - The actual COCO evaluator returns AP=1 for perfect boxes and AP=0 for disjoint
   boxes. Annotation ID 0 is rejected because COCO uses it as an unmatched sentinel.
@@ -55,3 +55,11 @@ Pending in Colab (not claimed as passed):
    predictions. No Aquafina recall, precision, AP or rejection claim exists yet.
 
 Synthetic fixtures are software tests only; they do not establish model quality.
+
+Duplicate diagnostics: 37 synthetic conflicting groups, all nine cross-split panels,
+train-only and validation-only summaries, filename-only differences, coordinate
+rounding candidates, different boxes, missing objects, changed classes, IoU and
+delta calculations, order-independent matching, ambiguous ties, report destination
+guards, stale-source rejection and unchanged raw hashes/audit state are tested.
+The full rerun passed after a Windows fixture-directory rename access error in the
+first run. No real Drive diagnostic run, conversion or training was performed.

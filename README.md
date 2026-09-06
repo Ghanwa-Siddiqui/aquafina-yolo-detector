@@ -13,9 +13,13 @@ There are no datasets or weights in this repository and no measured accuracy yet
    Expected MD5: `fca7260d4785af1dec18aa320fa9fc4a`.
 3. Open [notebook 01](notebooks/01_prepare_data.ipynb) on Colab CPU. Run cells
    **3 → 5 → 7 → 9** for mount/setup, archive verification/local extraction,
-   cached-or-fresh audit, and preview (counting markdown cells).
-4. Review the results, then set `CONFIRM_CONVERSION = True` in **cell 11** only when
-   ready to write processed data. Cell **13** reads back the completion marker.
+   cached-or-fresh audit, and duplicate-conflict diagnostics (counting markdown cells).
+   Cell **11** is the optional general preview.
+4. **Do not convert:** the real audit reports 37 annotation-conflicting duplicate
+   groups, including 9 cross-split groups. Cell **9** displays all cross-split
+   conflicts and saves `duplicate_conflict_report.json` under Drive diagnostics.
+   Cell **13** remains `CONFIRM_CONVERSION = False`; cell **15** is future completion
+   verification. Diagnostics never choose annotations or change audit decisions.
 5. Stop there for this dataset-support stage. [Notebook 02](notebooks/02_train_colab.ipynb)
    is for future training; [notebook 03](notebooks/03_evaluate_predict.ipynb) is for
    future evaluation and inference. See [the Colab workflow](docs/colab_workflow.md).
@@ -66,10 +70,11 @@ Do not place real datasets/weights in the repository even if ignored by Git.
   training IDs as all 4,870 image IDs minus validation. Ignore corrupt `train.txt`
   membership. Retain validation representatives of the 9 exact SHA-256 duplicate
   groups after verifying both complete annotation sets, excluding 9 training copies.
-  Processed counts: **3,991 train / 870 validation**, with zero cross-split content
+  Conditional target counts: **3,991 train / 870 validation**, with zero cross-split content
   overlap. Conflicting or ambiguous groups remain blocking; raw files are untouched.
   Exclusions are recorded in anomaly_report.json. The new code/policy key invalidates
-  previous audit caches; rerun notebook 01 cells 3, 5, 7 and 9 before confirmation.
+  previous audit caches. The real conflicting groups remain blocked (4,000 train,
+  zero exclusions, 9 content overlaps); use cells 3, 5, 7 and 9 to investigate.
   There is no TempleRAIL test split. The generic COCO `prepare` API still supports
   its original 70/15/15 grouped split for other datasets.
 - Only source Darknet class 0 (Aquafina) becomes a positive. Deer, Kirkland and

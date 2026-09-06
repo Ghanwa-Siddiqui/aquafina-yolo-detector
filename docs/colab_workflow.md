@@ -62,9 +62,10 @@ markdown and code cells. Run this exact order:
 | 3 | Mount Drive and set archive, stage, cache and output paths | Mounted Drive and proposed paths |
 | 5 | Sequentially copy/hash one archive, verify MD5, safely extract locally | MD5 verified, extraction progress, local input at /content/temple_stage/detection_dataset |
 | 7 | Reuse eligible audit cache or perform full local audit | Cache-hit message OR progress every 250 images, counts, anomalies and cache-save path |
-| 9 | Read-only local preview | Up to eight images: green Aquafina, orange competitors/background, red excluded dog |
-| 11 | Leave CONFIRM_CONVERSION=False to skip conversion; set True only after review | False: staging/cache retained, no converted dataset. True: converted summaries and raw_unchanged=True |
-| 13 | Read completion marker | complete, train_images=3991, val_images=870, excluded_training_images=9, cross_split_duplicate_content=0, raw_sha256_before_after_equal=True and output listing |
+| 9 | Duplicate-conflict diagnostics and report export | Expected 37 conflicting groups, 9 cross-split; all 9 side-by-side panels plus full comparisons and report path |
+| 11 | Read-only local preview | Up to eight images: green Aquafina, orange competitors/background, red excluded dog |
+| 13 | Leave CONFIRM_CONVERSION=False to skip conversion; set True only after review | False: staging/cache retained, no converted dataset. True: converted summaries and raw_unchanged=True |
+| 15 | Read completion marker (future conversion only) | complete, train_images=3991, val_images=870, excluded_training_images=9, cross_split_duplicate_content=0, raw_sha256_before_after_equal=True and output listing |
 
 The archive must be exactly:
 `/content/drive/MyDrive/aquafina-yolo/raw/temple/detection_dataset.tar.gz`.
@@ -108,7 +109,11 @@ unique `val.txt` IDs and discovers IDs from `JPEGImages`; it asserts exactly
 4,000 training IDs, 870 validation IDs, and zero ID overlap. The completed real
 audit found 9 crossing SHA-256 duplicate groups. Verify paired XML and Darknet
 annotations, retain each unique validation representative, and exclude its training
-copy. Expect 3,991 processed train images and all 870 validation images, with zero
+copy only if both complete annotation sets are equivalent. The real audit found
+37 conflicting groups (9 cross-split), so this condition is not met. Conversion
+remains blocked: processed_train_count=4000, excluded_training_count=0,
+cross_split_duplicate_content=9, blocking_errors=40. The conditional target is
+3,991 processed train images and all 870 validation images, with zero
 cross-split duplicate content. Each exclusion and its retained counterpart, hash
 and reason appear in anomaly_report.json. No random repartitioning
 or fake test set occurs. Notebook 03 refuses final test evaluation without an
@@ -129,11 +134,11 @@ reported. No automatic cleanup deletes original inputs or conflicting stages.
 
 Known dog/train-list anomalies are warnings. Unexplained class/box mismatches,
 invalid pairs/dimensions, wrong counts, multiple validation representatives,
-ambiguous groups and conflicting duplicate annotations block conversion. The 9
-verified equivalent groups are resolvable warnings after policy application.
+ambiguous groups and conflicting duplicate annotations block conversion. Only verified equivalent groups can become resolvable warnings. The current real
+conflicts are not equivalent and must remain blocking.
 The changed code/policy compatibility key invalidates the old audit cache; upload
 the updated repository, restart the Colab session to clear imported old code, then
-run cells 3, 5, 7 and 9 again. Cell 11 still defaults to CONFIRM_CONVERSION=False. Inspect the printed anomaly report; no partial conversion is
+run cells 3, 5, 7 and 9 again (diagnostics now occupies cell 9). Cell 13 still defaults to CONFIRM_CONVERSION=False. Inspect the printed anomaly report; no partial conversion is
 started for a failed audit. A failed conversion after writing begins has no final
 completion marker. Use a fresh version path on retry rather than overwriting files.
 
@@ -216,3 +221,36 @@ audio. Variable-frame-rate timing is not preserved exactly.
 
 Clear notebook outputs before returning files to the local repository. Run
 `python scripts/check_repository.py` before requesting any commit approval.
+
+## Duplicate-conflict investigation (no conversion)
+
+Upload the updated repository and restart Colab to avoid old imported modules.
+Run **3 -> 5 -> 7 -> 9**, then optionally **11** for the general preview. Stop there;
+leave cell 13 unconfirmed. Cell 15 only checks a future completed conversion.
+Audit cell 7 intentionally completes even with blocking errors so diagnostics run.
+
+Cell 9 writes only:
+`/content/drive/MyDrive/aquafina-yolo/diagnostics/temple/fca7260d4785af1dec18aa320fa9fc4a/duplicate_conflict_report.json`.
+Re-running it replaces this diagnostic JSON; it never creates processed output.
+All image panels remain in memory. The original archive and extracted data stay
+unchanged. Report construction and display never mutate the audit or split lists.
+
+The report separates cross-split, train-only and validation-only annotation
+conflicts, examining every exact-image group, including groups blocked for multiple
+validation representatives. The real findings predict 37 total and 9 cross-split;
+the remaining 28 are classified from actual membership, not assumed train-only.
+All cross-split conflicting groups are displayed without a sample limit. Cyan is
+that file's original Darknet geometry; magenta is its XML geometry. Numbered boxes
+link to the printed JSON with image ID, reconstructed split, classes, original
+Darknet lines, normalized center/size and corners, XML pixel boxes, signed edge
+differences and IoU. Darknet diagnostics retain original unclamped coordinates.
+
+Comparisons cover XML versus Darknet within each file and both formats separately
+across every pair of duplicate files. Geometry-first matching uses highest IoU,
+then lowest coordinate distance, then index order, with ties and unmatched boxes
+reported. Matches, especially disjoint or tied ones, are inspection aids rather
+than proof of object identity. Different class labels, missing objects and changed
+boxes may coexist. Differences of at most 1e-6 normalized are labeled rounding
+candidates; human review is required to determine harmlessness. No safety tolerance
+is relaxed. Filename-only differences are explicitly identified and already ignored
+by audit equivalence, so they cannot by themselves explain a blocking conflict.

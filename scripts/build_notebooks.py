@@ -64,7 +64,7 @@ PREPARE = [md("""
     Drive, verify MD5, extract to fast temporary disk and cache completed audits.
     Original Drive archive and extracted data are never modified or deleted.
     Staging/cache writes are automatic; dataset conversion still requires explicit
-    confirmation in cell 11. No input annotations.json is needed.
+    confirmation in cell 13. No input annotations.json is needed.
     """), md("""
     ## 1. Repository and Drive
     Upload and extract this repository's code to `/content/aquafina-yolo-detector`.
@@ -122,8 +122,9 @@ PREPARE = [md("""
     Incomplete, corrupt, stale or blocked results never bypass a fresh audit.
     Ignore train.txt for membership: preserve unique val.txt IDs and use
     all JPEGImages IDs minus validation: initially 4,000 train / 870 val.
-    Resolve the 9 equivalent cross-split SHA-256 groups by retaining validation
-    and excluding 9 training copies: expect 3,991 train / 870 val / zero content overlap.
+    The real audit reports 37 conflicting groups, including 9 crossing splits.
+    Conflicts remain blocked: 4,000 train, zero excluded, 9 content overlaps.
+    The 3,991/870 target applies only after a separately reviewed resolution.
     Known dog and corrupt-train-list warnings do not alone block conversion.
     Multiple validation representatives, ambiguous groups, conflicting complete XML
     or Darknet annotations, and unexpected counts still block conversion.
@@ -142,7 +143,37 @@ PREPARE = [md("""
     print(json.dumps(AUDIT.anomalies, indent=2))
     print('Completed audit cache:', CACHE_DIR / (STAGE.archive_md5 + '.json'))
     """), md("""
-    ## 4. Read-only preview from temporary disk
+    ## 4. Read-only duplicate-conflict diagnostics
+    Run even when the audit is blocked. Summarize cross-split, train-only and
+    validation-only conflicting groups, then display EVERY cross-split conflict
+    side-by-side (expected 9). Each panel overlays that file's Darknet boxes in cyan
+    and XML boxes in magenta. Printed JSON includes original label lines, classes,
+    coordinates, matched-box deltas, IoU and unmatched objects for every pair.
+    Matching is a diagnostic heuristic; inspect ties and unmatched objects manually.
+    Tiny differences are rounding candidates, not approval to relax the audit.
+    Filename-only XML differences are already ignored by the conversion policy.
+    Only the diagnostic JSON is saved under Drive diagnostics; no images, raw files,
+    audit decisions or processed dataset are changed. Stop after diagnostics and
+    optional preview for this investigation. Do not enable conversion.
+    """), code("""
+    from IPython.display import display
+    from aquafina_detector.temple_diagnostics import (
+        duplicate_conflict_report, render_duplicate_group, save_duplicate_conflict_report,
+    )
+    assert AUDIT is not None, 'Run audit cell 7 first'
+    CONFLICT_REPORT = duplicate_conflict_report(AUDIT)
+    print(json.dumps(CONFLICT_REPORT['summary'], indent=2))
+    print('Total conflicting groups:', CONFLICT_REPORT['total_conflicting_groups'])
+    for group in CONFLICT_REPORT['groups']:
+        if group['scope'] == 'cross_split' and group['annotation_conflict']:
+            print(json.dumps(group, indent=2))
+            display(render_duplicate_group(AUDIT, group))
+    REPORT_PATH = Path('/content/drive/MyDrive/aquafina-yolo/diagnostics/temple') / STAGE.archive_md5 / 'duplicate_conflict_report.json'
+    save_duplicate_conflict_report(AUDIT, CONFLICT_REPORT, REPORT_PATH, PROCESSED_ROOT)
+    print('Diagnostic report:', REPORT_PATH)
+    print('Audit remains:', AUDIT.audit['status'], 'Blocking errors:', AUDIT.audit['blocking_errors'])
+    """), md("""
+    ## 5. Read-only preview from temporary disk
     Green: Aquafina boxes kept. Orange: competitor boxes become background.
     Red: XML dog box excluded. Samples prioritize the dog image and available
     positive/mixed/negative subsets. Inspect all reported anomalies, not just these
@@ -158,9 +189,9 @@ PREPARE = [md("""
     PREVIEW_SHOWN = bool(previews)
     print('Preview displayed; nothing saved. Blocking errors:', AUDIT.audit['blocking_errors'])
     """), md("""
-    ## 5. Explicit confirmation before converted-dataset writes
+    ## 6. Explicit confirmation before converted-dataset writes
     After reviewing audit and preview, change CONFIRM_CONVERSION to True and run
-    cell 11. Keep it False to skip conversion. A clean audit and completed preview
+    cell 13. Keep it False to skip conversion. A clean audit and completed preview
     are required. Conversion writes exclusively under PROCESSED_ROOT, copies images
     (no raw symlinks), and checks raw hashes before/after. Existing output is never
     overwritten; use a new child/version path for another conversion.
@@ -173,12 +204,12 @@ PREPARE = [md("""
     if not CONFIRM_CONVERSION:
         print('Conversion not confirmed; no converted dataset written. Staging/audit cache are retained.')
     else:
-        assert AUDIT is not None and PREVIEW_SHOWN, 'Run audit cell 7 and preview cell 9 first'
+        assert AUDIT is not None and PREVIEW_SHOWN, 'Run audit cell 7 and preview cell 11 first'
         assert AUDIT.audit['blocking_errors'] == 0, 'Resolve blocking audit errors before conversion'
         CONVERSION_RESULT = convert_temple(AUDIT, PROCESSED_ROOT, confirm=True)
         print(json.dumps(CONVERSION_RESULT, indent=2))
     """), md("""
-    ## 6. Read back completed outputs
+    ## 7. Read back completed outputs
     audit.json, anomaly_report.json, class_counts.json, train_manifest.json,
     val_manifest.json, split_manifest.json and conversion.json accompany the
     annotations/train.json, annotations/val.json and train2017/val2017 images.
