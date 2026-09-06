@@ -27,7 +27,7 @@ Colab never needs to commit or push your code.
     Readme.txt
   cache/temple_audit/<archive-md5>.json     Completed audit state, automatically saved
   processed/temple/                 Confirmed conversion output
-    train2017/                     3,991 copied training images
+    train2017/                     Dynamically retained training images
     val2017/                       870 copied validation images
     annotations/train.json         Single-category COCO
     annotations/val.json
@@ -62,10 +62,10 @@ markdown and code cells. Run this exact order:
 | 3 | Mount Drive and set archive, stage, cache and output paths | Mounted Drive and proposed paths |
 | 5 | Sequentially copy/hash one archive, verify MD5, safely extract locally | MD5 verified, extraction progress, local input at /content/temple_stage/detection_dataset |
 | 7 | Reuse eligible audit cache or perform full local audit | Cache-hit message OR progress every 250 images, counts, anomalies and cache-save path |
-| 9 | Duplicate-conflict diagnostics and report export | Expected 37 conflicting groups, 9 cross-split; all 9 side-by-side panels plus full comparisons and report path |
+| 9 | Duplicate-conflict diagnostics and report export | Dynamically counted conflicting groups; all cross-split side-by-side panels plus full comparisons and report path |
 | 11 | Read-only local preview | Up to eight images: green Aquafina, orange competitors/background, red excluded dog |
 | 13 | Leave CONFIRM_CONVERSION=False to skip conversion; set True only after review | False: staging/cache retained, no converted dataset. True: converted summaries and raw_unchanged=True |
-| 15 | Read completion marker (future conversion only) | complete, train_images=3991, val_images=870, excluded_training_images=9, cross_split_duplicate_content=0, raw_sha256_before_after_equal=True and output listing |
+| 15 | Read completion marker | Counts match the audited retained IDs and exclusions; validation preserved; zero cross-split content overlap |
 
 The archive must be exactly:
 `/content/drive/MyDrive/aquafina-yolo/raw/temple/detection_dataset.tar.gz`.
@@ -102,22 +102,26 @@ Additional pairing, class/geometry, decoding and cross-split content checks must
 also pass. The user reports a completed real audit with 9 crossing duplicate
 groups; this updated resolution policy has only been tested on local fixtures.
 
-The original train list should report 13,740 entries, 4,870 unique IDs, 8,870
-duplicate entries, 4,870 IDs occurring more than once, and overlap with all 870
-validation IDs. It is inspected only for reporting. Reconstruction preserves the
-unique `val.txt` IDs and discovers IDs from `JPEGImages`; it asserts exactly
-4,000 training IDs, 870 validation IDs, and zero ID overlap. The completed real
-audit found 9 crossing SHA-256 duplicate groups. Verify paired XML and Darknet
-annotations, retain each unique validation representative, and exclude its training
-copy only if both complete annotation sets are equivalent. The real audit found
-37 conflicting groups (9 cross-split), so this condition is not met. Conversion
-remains blocked: processed_train_count=4000, excluded_training_count=0,
-cross_split_duplicate_content=9, blocking_errors=40. The conditional target is
-3,991 processed train images and all 870 validation images, with zero
-cross-split duplicate content. Each exclusion and its retained counterpart, hash
-and reason appear in anomaly_report.json. No random repartitioning
-or fake test set occurs. Notebook 03 refuses final test evaluation without an
-independent test file.
+## Conservative exact-duplicate policy
+
+Preserve all original unique validation IDs. For a cross-split exact SHA-256
+duplicate group with one validation representative, retain its annotations unchanged
+and exclude every training copy, even when annotations conflict. For train-only
+groups with conflicting XML or Darknet annotations, exclude every member. Equivalent
+train-only copies remain. Validation-only conflicts and multiple validation
+representatives remain blocking, as do invalid source pairs and malformed data.
+
+Final counts are dynamic: reconstructed training IDs minus the union of excluded
+IDs; validation membership is unchanged. No expected duplicate-group or processed
+image count is hard-coded. Every exclusion appears in anomaly_report.json with
+image ID, SHA-256, reason, scope, annotation-conflict flag and retained validation ID
+(null for train-only exclusions). No raw annotation is repaired or overwritten.
+The new policy compatibility key invalidates previous cached decisions.
+
+Notebook 01 order: **3 setup, 5 staging, 7 audit/policy, 9 diagnostics, 11 preview,
+13 explicit confirmation, 15 dynamic completion checks**. Conversion remains off
+by default and requires a clean audit and preview review. Diagnostics only write
+a separate report; this code update does not run real conversion or training.
 
 Read [the full conversion policy](temple_dataset.md) before confirmation. The audit
 itself reads staged files only; its wrapper saves completed audit state to Drive.
@@ -132,15 +136,10 @@ Interrupted extraction is never reused as complete. Restart the runtime or choos
 a fresh temporary stage path (and update TEMPLE_ROOT accordingly) if a conflict is
 reported. No automatic cleanup deletes original inputs or conflicting stages.
 
-Known dog/train-list anomalies are warnings. Unexplained class/box mismatches,
-invalid pairs/dimensions, wrong counts, multiple validation representatives,
-ambiguous groups and conflicting duplicate annotations block conversion. Only verified equivalent groups can become resolvable warnings. The current real
-conflicts are not equivalent and must remain blocking.
-The changed code/policy compatibility key invalidates the old audit cache; upload
-the updated repository, restart the Colab session to clear imported old code, then
-run cells 3, 5, 7 and 9 again (diagnostics now occupies cell 9). Cell 13 still defaults to CONFIRM_CONVERSION=False. Inspect the printed anomaly report; no partial conversion is
-started for a failed audit. A failed conversion after writing begins has no final
-completion marker. Use a fresh version path on retry rather than overwriting files.
+Known dog/train-list anomalies remain warnings. Invalid pairs/dimensions and
+validation-only conflicts remain blocking. Cross-split conflicts discard training
+copies; train-only conflicts discard all members. Inspect recorded exclusions
+before explicit confirmation. Existing processed output is never overwritten.
 
 **Stop after notebook 01 for the current task.** The following sections document
 future training/evaluation and do not authorize starting them now.
@@ -226,7 +225,7 @@ Clear notebook outputs before returning files to the local repository. Run
 
 Upload the updated repository and restart Colab to avoid old imported modules.
 Run **3 -> 5 -> 7 -> 9**, then optionally **11** for the general preview. Stop there;
-leave cell 13 unconfirmed. Cell 15 only checks a future completed conversion.
+leave cell 13 unconfirmed until exclusions and preview have been reviewed. Cell 15 only checks a future completed conversion.
 Audit cell 7 intentionally completes even with blocking errors so diagnostics run.
 
 Cell 9 writes only:
@@ -237,8 +236,7 @@ unchanged. Report construction and display never mutate the audit or split lists
 
 The report separates cross-split, train-only and validation-only annotation
 conflicts, examining every exact-image group, including groups blocked for multiple
-validation representatives. The real findings predict 37 total and 9 cross-split;
-the remaining 28 are classified from actual membership, not assumed train-only.
+validation representatives. Group membership and counts are calculated dynamically from the actual audit.
 All cross-split conflicting groups are displayed without a sample limit. Cyan is
 that file's original Darknet geometry; magenta is its XML geometry. Numbered boxes
 link to the printed JSON with image ID, reconstructed split, classes, original

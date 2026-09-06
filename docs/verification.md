@@ -5,7 +5,7 @@ available. PyTorch/CUDA are not installed in the local project environment.
 
 Completed locally:
 
-- 81 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
+- 82 tests passed with the isolated pycocotools dependency; two CUDA tests skipped.
 - Archive fixtures verify a single sequential source read, MD5 mismatch rejection,
   safe local extraction, unchanged original inputs, complete-stage reuse and
   rejection of modified stages. Cache tests verify reuse without a full audit,
@@ -16,8 +16,10 @@ Completed locally:
   class/coordinate mapping, hard negatives, corrupt input rejection, confirmation,
   stale audits and raw-file immutability. Nine synthetic cross-split groups resolve
   with unchanged validation membership; the full 4,870-ID fixture yields 3,991/870.
-  Conflicting XML/Darknet annotations, dog differences, ambiguous pairing, multiple
-  validation representatives and unexpected counts block conversion. Old cache
+  Cross-split annotation conflicts preserve validation and exclude training copies;
+  train-only conflicts discard every member. Dynamic counts, raw immutability and
+  conversion outputs are tested. Invalid pairing and validation conflicts remain
+  blocking; no fixed processed-count expectation is used. Old cache
   schemas/policy keys are rejected; tampered completion counts are rejected. Incomplete
   conversions are rejected, and a train/val-only conversion passes the verifier.
 - Notebook 01's setup/stage/audit-cache/preview order and conversion gate are tested.

@@ -18,12 +18,11 @@ TEMPLE_ROOT = Path("/content/drive/MyDrive/aquafina-yolo/raw/temple/extracted/de
 PROCESSED_ROOT = Path("/content/drive/MyDrive/aquafina-yolo/processed/temple")
 CLASSES = {0: "Aquafina", 1: "Deer", 2: "Kirkland", 3: "Nestle"}
 EXPECTED = {"images": 4870, "xml": 4870, "txt": 4873, "train": 4000, "val": 870,
-            "processed_train": 3991, "cross_split_groups": 9, "excluded_train": 9,
             "darknet_instances": {"Aquafina": 5227, "Deer": 4326, "Kirkland": 3552, "Nestle": 3735}}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
 PIXEL_TOLERANCE = 2.0  # VOC integer coordinates vs rounded normalized labels.
 PROGRESS_EVERY = 250
-DUPLICATE_POLICY_VERSION = "validation-priority-paired-annotations-v1"
+DUPLICATE_POLICY_VERSION = "validation-priority-discard-ambiguous-training-v2"
 
 
 def _annotation_signature(record, source):
@@ -35,7 +34,7 @@ def _annotation_signature(record, source):
 
 
 def resolve_duplicates(records, train_ids, val_ids, issue):
-    """Resolve only uniquely represented, annotation-equivalent validation groups."""
+    """Preserve unique validation copies; discard conflicting training-only groups."""
     train, val = set(train_ids), set(val_ids)
     groups = defaultdict(list)
     for key in sorted(train | val):
@@ -60,15 +59,19 @@ def resolve_duplicates(records, train_ids, val_ids, issue):
             and all(_annotation_signature(records[key], source) == _annotation_signature(first, source)
                     for source in ("xml_objects", "darknet_labels")) for key in ids[1:])
         if not equivalent:
-            issue("conflicting_duplicate_annotations", "error", **details)
-            continue
-        if training and validation:
+            issue("conflicting_duplicate_annotations", "warning", **details,
+                  action="Exclude training members; preserve unique validation representative if present")
+        if training and (validation or not equivalent):
+            counterpart = validation[0] if validation else None
+            reason = ("Exact-content duplicate; preserve validation annotations and exclude training copy"
+                      if validation else "Train-only conflicting annotations; exclude every group member")
             for key in training:
-                excluded.append({"image_id": key, "retained_validation_id": validation[0],
-                                 "sha256": digest,
-                                 "reason": "Exact-content duplicate with equivalent paired XML and Darknet annotations; preserve validation"})
-            issue("cross_split_duplicate_resolved", "warning", **details,
-                  retained_validation_id=validation[0], excluded_training_ids=training)
+                excluded.append({"image_id": key, "retained_validation_id": counterpart,
+                                 "sha256": digest, "reason": reason,
+                                 "scope": "cross_split" if validation else "train_only",
+                                 "annotations_conflict": not equivalent})
+            issue("cross_split_duplicate_resolved" if validation else "train_only_conflict_excluded",
+                  "warning", **details, retained_validation_id=counterpart, excluded_training_ids=training)
     excluded.sort(key=lambda item: item["image_id"])
     remaining = sorted(train - {item["image_id"] for item in excluded})
     overlap = {records[k]["sha256"] for k in remaining if k in records} & {
@@ -352,21 +355,15 @@ def audit_temple(root=TEMPLE_ROOT, expected=None, *, progress=None, _snapshot=No
     split_report.update({"train_count": len(train_ids), "val_count": len(val_ids),
                          "reconstructed_overlap": len(set(train_ids) & set(val_ids)), "test_count": 0})
     train_ids, exclusions, crossing, content_overlap = resolve_duplicates(records, train_ids, val_ids, issue)
-    split_report.update({"policy": split_report["policy"] + "; exclude verified equivalent training duplicates of unique validation representatives",
+    split_report.update({"policy": split_report["policy"] + "; preserve unique validation copies, exclude their training duplicates, discard all train-only conflicting members",
                          "duplicate_policy_version": DUPLICATE_POLICY_VERSION,
                          "original_validation_ids": sorted(set(original_val)),
                          "processed_train_count": len(train_ids), "processed_val_count": len(val_ids),
                          "cross_split_groups_before_policy": crossing,
                          "excluded_training_count": len(exclusions),
                          "cross_split_duplicate_content": content_overlap,
-                         "expected_processed_train": expected.get("processed_train", expected["train"]),
-                         "expected_processed_val": expected["val"]})
-    for field, actual, wanted in (
-            ("processed_train", len(train_ids), expected.get("processed_train", expected["train"])),
-            ("cross_split_groups", crossing, expected.get("cross_split_groups", 0)),
-            ("excluded_train", len(exclusions), expected.get("excluded_train", 0))):
-        if actual != wanted:
-            issue("duplicate_policy_count_mismatch", "error", field=field, expected=wanted, actual=actual)
+                         "expected_processed_train": split_report["train_count"] - len(exclusions),
+                         "expected_processed_val": len(set(original_val))})
     if content_overlap:
         issue("cross_split_duplicate_content", "error", groups=content_overlap)
     processed_records = [records[k] for k in train_ids + val_ids if k in records]

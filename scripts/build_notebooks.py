@@ -122,12 +122,12 @@ PREPARE = [md("""
     Incomplete, corrupt, stale or blocked results never bypass a fresh audit.
     Ignore train.txt for membership: preserve unique val.txt IDs and use
     all JPEGImages IDs minus validation: initially 4,000 train / 870 val.
-    The real audit reports 37 conflicting groups, including 9 crossing splits.
-    Conflicts remain blocked: 4,000 train, zero excluded, 9 content overlaps.
-    The 3,991/870 target applies only after a separately reviewed resolution.
-    Known dog and corrupt-train-list warnings do not alone block conversion.
-    Multiple validation representatives, ambiguous groups, conflicting complete XML
-    or Darknet annotations, and unexpected counts still block conversion.
+    Preserve the unique validation copy of every cross-split duplicate group,
+    including annotation conflicts; exclude its training copies. Discard every
+    member of train-only conflicting groups. Validation-only conflicts, multiple
+    validation representatives and invalid source annotation pairs remain blocking.
+    Final counts are calculated from reconstructed IDs minus recorded exclusions.
+    Dog handling and original validation membership remain unchanged.
     The changed code/policy compatibility key invalidates older audit caches.
     """), code("""
     import json
@@ -146,15 +146,15 @@ PREPARE = [md("""
     ## 4. Read-only duplicate-conflict diagnostics
     Run even when the audit is blocked. Summarize cross-split, train-only and
     validation-only conflicting groups, then display EVERY cross-split conflict
-    side-by-side (expected 9). Each panel overlays that file's Darknet boxes in cyan
+    side-by-side (no group-count assumption). Each panel overlays that file's Darknet boxes in cyan
     and XML boxes in magenta. Printed JSON includes original label lines, classes,
     coordinates, matched-box deltas, IoU and unmatched objects for every pair.
     Matching is a diagnostic heuristic; inspect ties and unmatched objects manually.
     Tiny differences are rounding candidates, not approval to relax the audit.
     Filename-only XML differences are already ignored by the conversion policy.
     Only the diagnostic JSON is saved under Drive diagnostics; no images, raw files,
-    audit decisions or processed dataset are changed. Stop after diagnostics and
-    optional preview for this investigation. Do not enable conversion.
+    audit decisions or processed dataset are changed. Review diagnostics and preview
+    before considering explicit conversion confirmation.
     """), code("""
     from IPython.display import display
     from aquafina_detector.temple_diagnostics import (
@@ -223,8 +223,9 @@ PREPARE = [md("""
         marker = read_json(PROCESSED_ROOT / 'conversion.json')
         from aquafina_detector.data import verify_prepared
         verify_prepared(PROCESSED_ROOT)
-        assert marker['train_images'] == 3991 and marker['val_images'] == 870
-        assert marker['excluded_training_images'] == 9
+        assert marker['train_images'] == AUDIT.audit['splits']['expected_processed_train']
+        assert marker['val_images'] == len(AUDIT.val_ids)
+        assert marker['excluded_training_images'] == len(AUDIT.anomalies['excluded_training_images'])
         assert marker['cross_split_duplicate_content'] == 0
         assert marker['validation_ids_preserved'] and marker['raw_sha256_before_after_equal']
         print(marker | {'source_file_sha256': '(omitted from display)'})

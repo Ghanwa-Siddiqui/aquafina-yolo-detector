@@ -53,12 +53,12 @@ def test_nine_groups_conversion_and_raw_immutability(temple, tmp_path):
         verify_prepared(output)
 
 
-def test_unexpected_duplicate_counts_block(temple):
+def test_duplicate_counts_calculated_dynamically(temple):
     root, expected = temple
     (root / "JPEGImages/img5.jpg").write_bytes((root / "JPEGImages/img0.jpg").read_bytes())
     audit = audit_temple(root, expected)
-    assert audit.audit["blocking_errors"] > 0
-    assert any(i["kind"] == "duplicate_policy_count_mismatch" for i in audit.anomalies["issues"])
+    assert audit.audit["blocking_errors"] == 0
+    assert audit.audit["splits"]["expected_processed_train"] == 3
 
 
 def test_policy_change_invalidates_compatibility_key(monkeypatch):
@@ -66,6 +66,32 @@ def test_policy_change_invalidates_compatibility_key(monkeypatch):
     before = temple_stage.audit_signature({})
     monkeypatch.setattr(temple_stage, "DUPLICATE_POLICY_VERSION", "future-policy")
     assert temple_stage.audit_signature({}) != before
+
+
+def test_train_only_conflicts_exclude_all_and_validation_conflicts_block(temple, tmp_path):
+    root, expected = temple
+    before = snapshot_raw(root)
+    # Different valid classes on identical training images: discard both.
+    (root / "JPEGImages/img1.jpg").write_bytes((root / "JPEGImages/img0.jpg").read_bytes())
+    before = snapshot_raw(root)
+    audit = audit_temple(root, expected)
+    assert audit.audit["blocking_errors"] == 0
+    assert audit.train_ids == ["img2", "img3"]
+    assert audit.audit["splits"]["expected_processed_train"] == 2
+    assert {e["image_id"] for e in audit.anomalies["excluded_training_images"]} == {"img0", "img1"}
+    assert all(e["retained_validation_id"] is None for e in audit.anomalies["excluded_training_images"])
+    output = tmp_path / "processed"
+    convert_temple(audit, output, confirm=True)
+    verify_prepared(output)
+    assert snapshot_raw(root) == before
+    assert not (output / "train2017/img0.jpg").exists()
+    assert not (output / "train2017/img1.jpg").exists()
+    (root / "JPEGImages/img5.jpg").write_bytes((root / "JPEGImages/img4.jpg").read_bytes())
+    blocked = audit_temple(root, expected)
+    assert blocked.audit["blocking_errors"] > 0
+    assert blocked.val_ids == ["img4", "img5"]
+    with pytest.raises(ValueError, match="blocking"):
+        convert_temple(blocked, tmp_path / "blocked", confirm=True)
 
 
 @pytest.mark.parametrize("conflict", ["both_classes", "darknet_geometry", "dog", "invalid_pair", "multiple_val"])
@@ -91,6 +117,12 @@ def test_conflicting_or_ambiguous_duplicate_annotations_block(temple, tmp_path, 
     else:
         (root / "JPEGImages/img4.jpg").write_bytes((root / "JPEGImages/img0.jpg").read_bytes())
     audit = audit_temple(root, expected)
+    if conflict not in {"invalid_pair", "multiple_val"}:
+        assert audit.audit["blocking_errors"] == 0
+        assert "img0" not in audit.train_ids and "img5" in audit.val_ids
+        assert audit.anomalies["excluded_training_images"][0]["annotations_conflict"]
+        convert_temple(audit, tmp_path / "resolved", confirm=True)
+        return
     assert audit.audit["blocking_errors"] > 0
     assert not audit.anomalies["excluded_training_images"]
     assert "img0" in audit.train_ids

@@ -52,25 +52,27 @@ in `val.txt`; reject validation IDs missing from JPEGImages. Training is all 4,8
 discovered image IDs minus those validation IDs. Enforce 4,000/870 and zero overlap.
 All original validation IDs remain validation; no extra test split is manufactured.
 
-Apply policy `validation-priority-paired-annotations-v1` after reconstruction.
-For each exact SHA-256 group crossing splits, require one validation representative
-and verified image/XML/Darknet pairing for every member. Compare complete XML and
-complete Darknet annotations separately, including competitors and dog exceptions.
-Ignore object order, line numbers, filename and class-name casing; require equal
-parsed coordinates and dimensions across copies. The 2-pixel XML/Darknet pairing
-tolerance does not excuse cross-copy annotation differences. Existing maximum
-1e-6 normalized boundary clamps remain allowed before this comparison.
+## Conservative exact-duplicate policy
 
-Retain the validation image and exclude all equivalent training members. The real
-policy requires 9 safely resolvable crossing groups and 9 exclusions, leaving **3,991 train / 870 val**
-and zero exact cross-split content overlap. Record each excluded `image_id`,
-`retained_validation_id`, `sha256` and `reason` in anomaly_report.json's
-`excluded_training_images`. No raw files are changed or deleted.
-Multiple validation representatives (even without training members), unverified
-pairs, conflicting annotations in any duplicate group, and unexpected counts
-remain blocking. Equivalent training-only groups remain in training and share a
-hash-based group_id. Hash groups do not prove capture-session independence.
-The source-code and policy compatibility signature invalidates old cached audits.
+Preserve all original unique validation IDs. For a cross-split exact SHA-256
+duplicate group with one validation representative, retain its annotations unchanged
+and exclude every training copy, even when annotations conflict. For train-only
+groups with conflicting XML or Darknet annotations, exclude every member. Equivalent
+train-only copies remain. Validation-only conflicts and multiple validation
+representatives remain blocking, as do invalid source pairs and malformed data.
+
+Final counts are dynamic: reconstructed training IDs minus the union of excluded
+IDs; validation membership is unchanged. No expected duplicate-group or processed
+image count is hard-coded. Every exclusion appears in anomaly_report.json with
+image ID, SHA-256, reason, scope, annotation-conflict flag and retained validation ID
+(null for train-only exclusions). No raw annotation is repaired or overwritten.
+The new policy compatibility key invalidates previous cached decisions.
+
+Notebook 01 order: **3 setup, 5 staging, 7 audit/policy, 9 diagnostics, 11 preview,
+13 explicit confirmation, 15 dynamic completion checks**. Conversion remains off
+by default and requires a clean audit and preview review. Diagnostics only write
+a separate report; this code update does not run real conversion or training.
+
 Near-duplicate or scene leakage remains a manual review responsibility.
 
 ## Classes, coordinates and dog exception
@@ -142,13 +144,3 @@ these checks and is never modified or deleted.
 
 No input annotations.json is needed. No test set is produced. The generic COCO
 preparation API remains available for independent, manually annotated datasets.
-
-## Current conflicting duplicates
-
-The completed real audit reports 37 groups with conflicting annotations, including
-9 crossing reconstructed splits. None qualify for exclusion: train remains 4,000,
-validation 870, exclusions 0, cross-split content overlap 9 and blocking errors 40.
-Do not relax the equivalence checks or convert these results. Notebook 01 cell 9
-provides read-only annotation comparisons and exports a separate diagnostic JSON.
-See [diagnostic interpretation and execution order](colab_workflow.md#duplicate-conflict-investigation-no-conversion).
-The report makes no annotation selection and cannot approve conversion.
